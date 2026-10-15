@@ -65,8 +65,8 @@ export function emptyWorkspace(): Workspace {
     topicsCollapsed: false,
     matchDurations: { auto: 20, transition: 3, teleop: 140 },
     overlay: {
-      width: 320,
-      height: 180,
+      width: 560,
+      height: 56,
       x: 120,
       y: 120,
       controls: ["mode", "keyboard"],
@@ -195,8 +195,8 @@ export function validateWorkspace(input: unknown): Workspace {
           topicsCollapsed: false,
           matchDurations: { auto: 20, transition: 3, teleop: 140 },
           overlay: {
-            width: 320,
-            height: 180,
+            width: 560,
+            height: 56,
             x: 120,
             y: 120,
             controls: ["mode", "keyboard"],
@@ -315,7 +315,7 @@ export function validateWorkspace(input: unknown): Workspace {
     w.overlay.width < 260 ||
     w.overlay.width > 2500 ||
     !Number.isFinite(w.overlay.height) ||
-    w.overlay.height < 140 ||
+    w.overlay.height < 56 ||
     w.overlay.height > 2000 ||
     !Number.isFinite(w.overlay.x) ||
     Math.abs(w.overlay.x) > 100000 ||
@@ -323,7 +323,8 @@ export function validateWorkspace(input: unknown): Workspace {
     Math.abs(w.overlay.y) > 100000 ||
     !Array.isArray(w.overlay.controls) ||
     w.overlay.controls.some(
-      (v) => !["mode", "alliance", "estop", "keyboard"].includes(v),
+      (v) =>
+        !["mode", "alliance", "estop", "keyboard", "extraPorts"].includes(v),
     ) ||
     !Array.isArray(w.overlay.topics) ||
     w.overlay.topics.some((v) => typeof v !== "string" || v.length > 4096)
@@ -346,6 +347,19 @@ export function validateWorkspace(input: unknown): Workspace {
     keyboardPort: w.keyboardPort,
     topicsCollapsed: w.topicsCollapsed,
     matchDurations: w.matchDurations,
-    overlay: w.overlay,
+    overlay: {
+      ...w.overlay,
+      // Upgrade the old fixed overlay sizes; the pill now fits its contents.
+      width:
+        (w.overlay.width === 320 && w.overlay.height === 180) ||
+        (w.overlay.width === 720 && w.overlay.height === 88)
+          ? 560
+          : Math.max(320, w.overlay.width),
+      height:
+        (w.overlay.width === 320 && w.overlay.height === 180) ||
+        (w.overlay.width === 720 && w.overlay.height === 88)
+          ? 56
+          : w.overlay.height,
+    },
   };
 }

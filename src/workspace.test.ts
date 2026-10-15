@@ -54,7 +54,7 @@ describe("generic workspace", () => {
   it("persists overlay order and validates destination and durations", () => {
     const w = emptyWorkspace();
     w.overlay.topics = ["/Drive/left", "/Drive/right"];
-    w.overlay.width = 500;
+    w.overlay.width = 600;
     w.overlay.height = 260;
     w.overlay.x = 24;
     w.overlay.y = 80;
@@ -68,6 +68,27 @@ describe("generic workspace", () => {
         matchDurations: { auto: -1, transition: 3, teleop: 140 },
       }),
     ).toThrow();
+  });
+  it("upgrades the original overlay bounds and accepts a short pill", () => {
+    const w = emptyWorkspace();
+    expect(w.overlay.width).toBe(560);
+    expect(w.overlay.height).toBe(56);
+    w.overlay.width = 320;
+    w.overlay.height = 180;
+    expect(validateWorkspace(w).overlay).toMatchObject({
+      width: 560,
+      height: 56,
+    });
+    w.overlay.width = 720;
+    w.overlay.height = 88;
+    expect(validateWorkspace(w).overlay).toMatchObject({
+      width: 560,
+      height: 56,
+    });
+    w.overlay.height = 56;
+    expect(validateWorkspace(w).overlay.height).toBe(56);
+    w.overlay.height = 55;
+    expect(() => validateWorkspace(w)).toThrow();
   });
   it("preserves int64 precision and validates writes", () => {
     expect(parseValue("int", "9223372036854775807")).toBe(

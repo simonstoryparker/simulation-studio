@@ -670,24 +670,10 @@ export default function App() {
     [busy, setBusy] = useState(false),
     [updating, setUpdating] = useState(false);
   const compactTransition = useRef(false);
+  const autoCompact = useRef(true);
+  const compactContent = useRef<HTMLDivElement>(null);
   const compactState = useRef(compact);
   compactState.current = compact;
-  const resizeDrag = useRef<{
-    pointer: number;
-    x: number;
-    y: number;
-    width: number;
-    height: number;
-  } | null>(null);
-  const resizeFrame = useRef<number | null>(null);
-  const requestedSize = useRef({ width: 320, height: 180 });
-  useEffect(
-    () => () => {
-      if (resizeFrame.current !== null)
-        cancelAnimationFrame(resizeFrame.current);
-    },
-    [],
-  );
   const current = useRef({ workspace, endpoints, ready });
   current.current = { workspace, endpoints, ready };
   const fileInput = useRef<HTMLInputElement>(null);
@@ -773,6 +759,10 @@ export default function App() {
               overlay: { ...old.overlay, ...e.payload },
             })),
         ),
+        listen<boolean>("compact-changed", (e) => {
+          compactState.current = e.payload;
+          setCompact(e.payload);
+        }),
         listen<number>("keyboard-port", (e) =>
           setWorkspace((old) => ({ ...old, keyboardPort: e.payload })),
         ),
@@ -1099,7 +1089,7 @@ export default function App() {
       } | null>("set_compact", {
         compact: next,
         width: overlay.width,
-        height: overlay.height,
+        height: Math.max(overlay.height, overlay.topics.length ? 96 : 56),
         x: overlay.x,
         y: overlay.y,
       });
@@ -1116,14 +1106,25 @@ export default function App() {
       compactTransition.current = false;
     }
   }, []);
-  const toggleCompact = () => changeCompact(!compactState.current);
+  const toggleCompact = () => {
+    autoCompact.current = true;
+    return changeCompact(!compactState.current);
+  };
+  const dismissCompact = () => {
+    autoCompact.current = false;
+    void changeCompact(false);
+  };
+  useEffect(() => {
+    document.documentElement.classList.toggle("compact-window", compact);
+    return () => document.documentElement.classList.remove("compact-window");
+  }, [compact]);
   useEffect(() => {
     let disposed = false;
     let unlisten: (() => void) | undefined;
     void getCurrentWindow()
       .onFocusChanged(({ payload: focused }) => {
-        if (!disposed && !focused && current.current.ready)
-          void changeCompact(true);
+        if (disposed || !current.current.ready) return;
+        if (!focused && autoCompact.current) void changeCompact(true);
       })
       .then((cleanup) => {
         if (disposed) cleanup();
@@ -1135,6 +1136,51 @@ export default function App() {
       unlisten?.();
     };
   }, [changeCompact]);
+  useEffect(() => {
+    const content = compactContent.current;
+    if (!compact || !content) return;
+    let frame = 0;
+    let disposed = false;
+    let previousSize = "";
+    const fit = () => {
+      if (disposed) return;
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        if (disposed) return;
+        const rect = content.getBoundingClientRect();
+        if (!rect.width || !rect.height) return;
+        const width = Math.max(
+          320,
+          Math.min(
+            Math.ceil(rect.width + 42),
+            (screen.availWidth || 2560) - 24,
+          ),
+        );
+        const height = Math.max(
+          56,
+          Math.min(
+            Math.ceil(rect.height + 18),
+            (screen.availHeight || 1440) - 24,
+          ),
+        );
+        const size = `${width}:${height}`;
+        if (size === previousSize) return;
+        previousSize = size;
+        void command("resize_compact", { width, height }).catch((e) =>
+          setError(String(e)),
+        );
+      });
+    };
+    const observer = new ResizeObserver(fit);
+    observer.observe(content);
+    void document.fonts?.ready.then(fit);
+    fit();
+    return () => {
+      disposed = true;
+      observer.disconnect();
+      cancelAnimationFrame(frame);
+    };
+  }, [compact]);
   const exportWorkspace = () => {
     const url = URL.createObjectURL(
       new Blob([JSON.stringify(workspace, null, 2)], {
@@ -1201,177 +1247,181 @@ export default function App() {
       [topics[index], topics[next]] = [topics[next], topics[index]];
       return { ...old, overlay: { ...old.overlay, topics } };
     });
+  const enableSelected = Boolean(
+    connections.control && applied?.enabled && !applied.estop,
+  );
+  const disableSelected = Boolean(
+    connections.control && applied && !applied.enabled && !applied.estop,
+  );
   if (compact)
     return (
       <div className="compact-app" data-tauri-drag-region>
-        <header className="compact-header" data-tauri-drag-region>
-          <strong data-tauri-drag-region>
-            {endpoints.project || "Simulation"}
-          </strong>
-          <span className={connections.control ? "online" : "offline"}>
-            {connections.control ? "●" : "○"} Control
-          </span>
-          <button
-            aria-label="Expand simulation window"
-            onClick={() => void toggleCompact()}
-          >
-            ↗
-          </button>
-        </header>
-        <div className="compact-status">
-          <strong>
-            {applied?.estop
-              ? "E-STOPPED"
-              : connections.control && applied?.enabled
-                ? "ENABLED"
-                : "DISABLED"}
-          </strong>
-          <span>
-            {matchPhase} ·{" "}
-            {mode === "full"
-              ? `${Math.floor(elapsed)}s elapsed · ${Math.ceil(matchTime)}s left`
-              : `${Math.floor(elapsed)}s elapsed`}
-          </span>
-        </div>
-        <div className="compact-actions">
-          <button
-            className="enable"
-            disabled={!connections.control || applied?.estop}
-            onClick={() =>
-              mode === "full" ? void startMatch() : void ds(true)
-            }
-          >
-            Enable
-          </button>
-          <button className="disable" onClick={() => void ds(false)}>
-            Disable
-          </button>
-          {showOverlayControl("estop") && (
-            <button className="estop" onClick={() => void ds(false, true)}>
-              E-stop
-            </button>
+        <div
+          className="compact-content"
+          ref={compactContent}
+          data-tauri-drag-region
+        >
+          <div className="compact-bar" data-tauri-drag-region>
+            <header className="compact-header" data-tauri-drag-region>
+              <strong data-tauri-drag-region>
+                {endpoints.project || "Simulation"}
+              </strong>
+              <span
+                title={
+                  connections.control
+                    ? "Control connected"
+                    : "Control disconnected"
+                }
+                className={connections.control ? "online" : "offline"}
+              >
+                {connections.control ? "●" : "○"}
+              </span>
+              <button
+                className="compact-expand"
+                title="Open Studio"
+                aria-label="Expand simulation window"
+                onClick={() => void toggleCompact()}
+              >
+                ↗
+              </button>
+            </header>
+            <div className="compact-status">
+              <strong>
+                {applied?.estop
+                  ? "E-STOPPED"
+                  : connections.control && applied?.enabled
+                    ? "ENABLED"
+                    : "DISABLED"}
+              </strong>
+              <span title={`${matchPhase} · ${Math.floor(elapsed)}s elapsed`}>
+                {mode === "full"
+                  ? `${Math.ceil(matchTime)}s left`
+                  : `${Math.floor(elapsed)}s`}
+              </span>
+            </div>
+            <div className="compact-actions">
+              <button
+                className="enable"
+                aria-pressed={enableSelected}
+                disabled={!connections.control || applied?.estop}
+                onClick={() =>
+                  mode === "full" ? void startMatch() : void ds(true)
+                }
+              >
+                Enable
+              </button>
+              <button
+                className="disable"
+                aria-pressed={disableSelected}
+                onClick={() => void ds(false)}
+              >
+                Disable
+              </button>
+              {showOverlayControl("estop") && (
+                <button className="estop" onClick={() => void ds(false, true)}>
+                  E-stop
+                </button>
+              )}
+            </div>
+            {showOverlayControl("mode") && (
+              <div className="compact-modes">
+                <select
+                  aria-label="Robot mode"
+                  value={mode}
+                  onChange={(e) => {
+                    setMode(e.target.value);
+                    void ds(
+                      false,
+                      false,
+                      e.target.value === "full" ? "auto" : e.target.value,
+                    );
+                  }}
+                >
+                  <option value="auto">Auto</option>
+                  <option value="teleop">Teleop</option>
+                  <option value="test">Test</option>
+                  <option value="full">Full Match</option>
+                </select>
+              </div>
+            )}
+            {showOverlayControl("keyboard") && (
+              <div
+                className="compact-ports"
+                role="group"
+                aria-label="Controller ports and keyboard destination"
+              >
+                {workspace.profiles.map((p, i) => {
+                  if (
+                    i > 1 &&
+                    workspace.keyboardPort !== i &&
+                    !showOverlayControl("extraPorts")
+                  )
+                    return null;
+                  const physical = p.source.startsWith("gamepad:")
+                    ? (devices.find((d) => `gamepad:${d.id}` === p.source)
+                        ?.name ?? "Unavailable")
+                    : "None";
+                  return (
+                    <button
+                      key={i}
+                      className={workspace.keyboardPort === i ? "selected" : ""}
+                      title={`Port ${i}: ${p.name}; controller ${physical}; ${workspace.keyboardPort === i ? "keyboard destination" : ""}`}
+                      onClick={() => setKeyboardPort(i)}
+                    >
+                      <span>{i}</span>
+                      <small>{p.name}</small>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+            {showOverlayControl("alliance") && (
+              <select
+                className="compact-alliance"
+                aria-label="Alliance"
+                value={alliance}
+                onChange={(e) => {
+                  setAlliance(e.target.value);
+                  void ds(false, false, mode, e.target.value);
+                }}
+              >
+                {[
+                  "Unknown",
+                  "Red1",
+                  "Red2",
+                  "Red3",
+                  "Blue1",
+                  "Blue2",
+                  "Blue3",
+                ].map((v) => (
+                  <option key={v}>{v}</option>
+                ))}
+              </select>
+            )}
+          </div>
+          <div className="compact-widgets">
+            {compactTopics.map((w) => (
+              <article key={w.id}>
+                <strong>{w.title}</strong>
+                <WidgetBody widget={w} connected={connections.nt} compact />
+              </article>
+            ))}
+          </div>
+          {error && (
+            <div className="compact-error" role="alert">
+              {error}
+              <button onClick={() => setError("")}>×</button>
+            </div>
           )}
         </div>
-        {showOverlayControl("mode") && (
-          <div className="compact-modes">
-            <select
-              aria-label="Robot mode"
-              value={mode}
-              onChange={(e) => {
-                setMode(e.target.value);
-                void ds(
-                  false,
-                  false,
-                  e.target.value === "full" ? "auto" : e.target.value,
-                );
-              }}
-            >
-              <option value="auto">Auto</option>
-              <option value="teleop">Teleop</option>
-              <option value="test">Test</option>
-              <option value="full">Full Match</option>
-            </select>
-          </div>
-        )}
-        {showOverlayControl("keyboard") && (
-          <div
-            className="compact-ports"
-            aria-label="Controller ports and keyboard destination"
-          >
-            {workspace.profiles.map((p, i) => {
-              const physical = p.source.startsWith("gamepad:")
-                ? (devices.find((d) => `gamepad:${d.id}` === p.source)?.name ??
-                  "Unavailable")
-                : "None";
-              return (
-                <button
-                  key={i}
-                  className={workspace.keyboardPort === i ? "selected" : ""}
-                  title={`Port ${i}: ${p.name}; controller ${physical}; ${workspace.keyboardPort === i ? "keyboard destination" : ""}`}
-                  onClick={() => setKeyboardPort(i)}
-                >
-                  {i}
-                  <small>{p.name}</small>
-                  <small>{physical === "None" ? "○" : "●"}</small>
-                </button>
-              );
-            })}
-          </div>
-        )}
         <button
-          className="resize-grip"
-          aria-label="Resize compact overlay"
-          onPointerDown={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            resizeDrag.current = {
-              pointer: e.pointerId,
-              x: e.screenX,
-              y: e.screenY,
-              width: window.innerWidth,
-              height: window.innerHeight,
-            };
-            e.currentTarget.setPointerCapture(e.pointerId);
-          }}
-          onPointerMove={(e) => {
-            const drag = resizeDrag.current;
-            if (!drag || drag.pointer !== e.pointerId) return;
-            requestedSize.current = {
-              width: Math.max(260, drag.width + e.screenX - drag.x),
-              height: Math.max(140, drag.height + e.screenY - drag.y),
-            };
-            if (resizeFrame.current !== null) return;
-            resizeFrame.current = requestAnimationFrame(() => {
-              resizeFrame.current = null;
-              void command("resize_compact", requestedSize.current).catch(
-                (error) => setError(String(error)),
-              );
-            });
-          }}
-          onPointerUp={(e) => {
-            resizeDrag.current = null;
-            e.currentTarget.releasePointerCapture(e.pointerId);
-          }}
-          onPointerCancel={() => {
-            resizeDrag.current = null;
-          }}
-          onLostPointerCapture={() => {
-            resizeDrag.current = null;
-          }}
+          className="compact-close"
+          aria-label="Dismiss compact overlay"
+          title="Dismiss until Compact is clicked in Studio"
+          onClick={dismissCompact}
         >
-          ◢
+          ×
         </button>
-        {showOverlayControl("alliance") && (
-          <select
-            className="compact-alliance"
-            aria-label="Alliance"
-            value={alliance}
-            onChange={(e) => {
-              setAlliance(e.target.value);
-              void ds(false, false, mode, e.target.value);
-            }}
-          >
-            {["Unknown", "Red1", "Red2", "Red3", "Blue1", "Blue2", "Blue3"].map(
-              (v) => (
-                <option key={v}>{v}</option>
-              ),
-            )}
-          </select>
-        )}
-        <div className="compact-widgets">
-          {compactTopics.map((w) => (
-            <article key={w.id}>
-              <strong>{w.title}</strong>
-              <WidgetBody widget={w} connected={connections.nt} compact />
-            </article>
-          ))}
-        </div>
-        {error && (
-          <div className="compact-error" role="alert">
-            {error}
-            <button onClick={() => setError("")}>×</button>
-          </div>
-        )}
       </div>
     );
   return (
@@ -1389,6 +1439,7 @@ export default function App() {
             </span>
           </small>
         </div>
+        <button onClick={() => void toggleCompact()}>Compact</button>
         <button
           onClick={() => setSettingsPage((open) => !open)}
           aria-pressed={settingsPage}
@@ -1424,8 +1475,9 @@ export default function App() {
             <section className="settings-card overlay-settings">
               <h2>Compact overlay</h2>
               <p className="hint">
-                The window automatically turns compact when you click away. Use
-                the expand button to return to Studio.
+                Click away to show the pill. Return to Studio through the Dock,
+                window switcher, or expand button. Closing the pill pauses it
+                until you click Compact again. Ports 0 and 1 appear by default.
               </p>
               <button onClick={toggleCompact}>Open compact overlay</button>
               <h3>Controls</h3>
@@ -1435,6 +1487,7 @@ export default function App() {
                   ["alliance", "Alliance"],
                   ["estop", "E-stop"],
                   ["keyboard", "Keyboard ports"],
+                  ["extraPorts", "Include ports 2–5"],
                 ].map(([id, label]) => (
                   <label key={id}>
                     <input
@@ -1508,6 +1561,7 @@ export default function App() {
               <div className="control-row">
                 <button
                   className="enable large"
+                  aria-pressed={enableSelected}
                   disabled={!connections.control || applied?.estop || busy}
                   onClick={() =>
                     mode === "full" ? void startMatch() : void ds(true)
@@ -1517,6 +1571,7 @@ export default function App() {
                 </button>
                 <button
                   className="disable large"
+                  aria-pressed={disableSelected}
                   onClick={() => void ds(false)}
                 >
                   Disable

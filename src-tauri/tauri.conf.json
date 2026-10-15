@@ -9,9 +9,12 @@
         "width": 1280,
         "minWidth": 900,
         "title": "Simulation Studio",
-        "height": 820
+        "height": 820,
+        "transparent": true,
+        "acceptFirstMouse": true
       }
-    ]
+    ],
+    "macOSPrivateApi": true
   },
   "identifier": "org.team581.simulation-studio",
   "$schema": "https://schema.tauri.app/config/2",

@@ -1,4 +1,9 @@
 :root {
+  /* Team 581 accents; green remains reserved for enable and status indicators. */
+  --accent: #ff9b42;
+  --accent-surface: #50331e;
+  --accent-hover: #674326;
+  --accent-selected: #895728;
   font-family:
     Inter,
     system-ui,
@@ -40,7 +45,7 @@ button:disabled {
 input:focus,
 select:focus,
 textarea:focus {
-  outline: 2px solid #5dddc0;
+  outline: 2px solid var(--accent);
 }
 small {
   font-size: 11px;
@@ -71,7 +76,7 @@ label {
   margin-right: auto;
 }
 .brand-icon {
-  background: #5dddc0;
+  background: var(--accent);
   color: #111722;
   padding: 6px 10px;
   border-radius: 7px;
@@ -81,11 +86,11 @@ label {
   display: block;
   margin-top: 3px;
 }
-.enable {
+.enable[aria-pressed="true"] {
   background: #164d42;
   border-color: #328773;
 }
-.disable {
+.disable[aria-pressed="true"] {
   background: #833336;
   border-color: #bd595e;
   font-weight: bold;
@@ -189,7 +194,7 @@ label {
   position: absolute;
   right: 4px;
   top: 10px;
-  color: #5dddc0;
+  color: var(--accent);
 }
 .folder-row {
   color: #b2c6e8;
@@ -212,8 +217,8 @@ label {
   margin-left: auto;
 }
 .selected {
-  border-color: #5dddc0;
-  color: #5dddc0;
+  border-color: var(--accent);
+  color: var(--accent);
 }
 .grid-scroll {
   flex: 1;
@@ -346,8 +351,12 @@ label {
   gap: 8px;
 }
 .primary {
-  background: #215c4e;
-  border-color: #5dddc0;
+  background: var(--accent-surface);
+  border-color: var(--accent);
+}
+.primary:hover {
+  background: var(--accent-hover);
+  border-color: var(--accent);
 }
 .check {
   flex-direction: row;
@@ -427,7 +436,7 @@ textarea {
   min-height: 0;
 }
 .react-grid-item.react-grid-placeholder {
-  background: #5dddc0;
+  background: var(--accent);
   opacity: 0.15;
 }
 
@@ -484,10 +493,10 @@ textarea {
 }
 .gamepad-fallback .fallback-control:hover path,
 .gamepad-fallback .fallback-control:focus-visible path {
-  fill: #365d68;
+  fill: var(--accent-hover);
 }
 .gamepad-fallback .fallback-control.selected path {
-  fill: #427b80;
+  fill: var(--accent-selected);
 }
 .gamepad-fallback text {
   fill: #b6cbd9;
@@ -585,14 +594,6 @@ textarea {
   flex: 1;
   font-weight: 700;
   font-size: 16px;
-}
-.enable.large {
-  background: #164d42;
-  border-color: #328773;
-}
-.disable.large {
-  background: #833336;
-  border-color: #bd595e;
 }
 .control-selectors {
   display: grid;
@@ -714,7 +715,7 @@ textarea {
   padding: 4px 9px;
 }
 .keyboard-dest .selected {
-  background: #155447;
+  background: var(--accent-surface);
 }
 .duration-fields {
   display: grid;
@@ -791,100 +792,164 @@ textarea {
 .tabs-spacer {
   flex: 1;
 }
+/* Transparent native window lets the capsule silhouette float above other apps. */
+:root.compact-window {
+  background: transparent;
+}
 .compact-app {
+  position: relative;
   width: 100vw;
   height: 100vh;
-  overflow: auto;
-  resize: both;
-  min-width: 260px;
-  min-height: 140px;
-  padding: 9px;
+  min-width: 320px;
+  min-height: 56px;
+  padding: 8px 20px;
   display: flex;
   flex-direction: column;
-  gap: 7px;
-  background: #111722;
-  font-size: 12px;
+  justify-content: center;
+  gap: 6px;
+  border: 1px solid #435066;
+  border-radius: 30px;
+  background: #111722f5;
+  overflow: hidden;
+  font-size: 11px;
+}
+.compact-content {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: max-content;
+  flex: none;
+}
+.compact-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  flex-shrink: 0;
+  overflow-x: auto;
+  scrollbar-width: thin;
 }
 .compact-header {
   display: flex;
   align-items: center;
-  gap: 8px;
-  min-height: 24px;
+  gap: 6px;
+  min-width: 60px;
+  max-width: 110px;
+  flex-shrink: 0;
 }
 .compact-header strong {
-  margin-right: auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
-.compact-header button {
-  padding: 3px 7px;
+.compact-expand {
+  padding: 3px;
+  border: 0;
+  background: transparent;
 }
 .compact-status {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 4px 7px;
-  background: #202a39;
-  border-radius: 4px;
+  flex-direction: column;
+  gap: 2px;
+  white-space: nowrap;
 }
 .compact-status strong {
-  font-size: 13px;
+  font-size: 10px;
+  letter-spacing: 0.04em;
 }
-.compact-actions {
-  display: flex;
-  gap: 5px;
+.compact-status span {
+  color: #97a7bd;
 }
-.compact-actions button {
-  flex: 1;
-  padding: 5px;
-}
-.compact-modes {
-  display: flex;
-  gap: 5px;
-}
-.compact-modes select {
-  flex: 1;
-  padding: 4px;
-}
-.compact-modes button {
-  padding: 4px 7px;
-}
+.compact-actions,
 .compact-ports {
   display: flex;
   gap: 4px;
+  flex-shrink: 0;
+}
+.compact-actions button {
+  padding: 7px 9px;
+  border-radius: 18px;
+}
+.compact-modes {
+  flex-shrink: 0;
+}
+.compact-modes select,
+.compact-alliance {
+  width: auto;
+  padding: 6px;
+  border-radius: 18px;
+}
+.compact-ports {
+  border-left: 1px solid #354155;
+  padding-left: 8px;
 }
 .compact-ports button {
-  flex: 1;
-  padding: 3px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  min-width: 54px;
+  min-height: 38px;
+  line-height: 1.15;
+  padding: 4px 10px;
+  border-radius: 19px;
+}
+.compact-ports button small {
+  display: block;
+  max-width: 100px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 9px;
 }
 .compact-ports button.selected {
-  border-color: #5dddc0;
-  color: #5dddc0;
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-surface);
 }
-.compact-alliance {
-  width: 100%;
-  padding: 4px;
+.compact-close {
+  position: absolute;
+  top: 2px;
+  right: 7px;
+  width: 17px;
+  height: 17px;
+  padding: 0;
+  border-radius: 50%;
+  opacity: 0;
+  transition: opacity 120ms;
+}
+.compact-app:hover .compact-close,
+.compact-app:focus-within .compact-close {
+  opacity: 1;
+}
+.compact-close:focus-visible {
+  opacity: 1;
+  outline: 2px solid var(--accent);
 }
 .compact-widgets {
   overflow: auto;
   display: flex;
-  flex-direction: column;
-  gap: 5px;
+  gap: 6px;
+  min-height: 0;
+}
+.compact-widgets:empty {
+  display: none;
 }
 .compact-widgets article {
+  min-width: 160px;
   border: 1px solid #354155;
-  border-radius: 5px;
-  padding: 5px;
-}
-.compact-widgets article > strong {
-  display: block;
-  margin-bottom: 4px;
+  border-radius: 14px;
+  padding: 5px 8px;
 }
 .compact-widgets .widget-content {
-  min-height: 28px;
+  min-height: 20px;
 }
 .compact-error {
   display: flex;
   justify-content: space-between;
   color: #ff9a9f;
+  overflow: auto;
 }
 @media (max-width: 820px) {
   .left-column {
@@ -937,36 +1002,6 @@ textarea {
 }
 .controllers-page .controller-editor {
   overflow: auto;
-}
-.compact-app {
-  position: relative;
-}
-.compact-ports button {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  line-height: 1.2;
-  padding: 3px 1px;
-  min-width: 0;
-}
-.compact-ports button small {
-  display: block;
-  max-width: 44px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  font-size: 8px;
-}
-.resize-grip {
-  position: fixed;
-  right: 0;
-  bottom: 0;
-  z-index: 5;
-  padding: 1px 3px;
-  border: 0;
-  background: transparent;
-  color: #9aa9bd;
-  cursor: nwse-resize;
 }
 .topic-order {
   display: flex;

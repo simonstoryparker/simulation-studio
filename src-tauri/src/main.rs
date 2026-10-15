@@ -338,6 +338,49 @@ fn start_match(
     state.wake.notify_one();
     Ok(())
 }
+// Inspect the native activation event: WebKit may consume the first click into
+// an inactive window before a DOM pointer event can reach React.
+#[cfg(target_os = "macos")]
+fn pointer_activation(_window: &tauri::Window) -> bool {
+    use objc2::MainThreadMarker;
+    use objc2_app_kit::{NSApplication, NSEvent, NSEventType};
+    use objc2_foundation::NSProcessInfo;
+    let Some(main_thread) = MainThreadMarker::new() else {
+        return true;
+    };
+    if NSEvent::pressedMouseButtons() != 0 {
+        return true;
+    }
+    NSApplication::sharedApplication(main_thread)
+        .currentEvent()
+        .is_some_and(|event| {
+            matches!(
+                event.r#type(),
+                NSEventType::LeftMouseDown
+                    | NSEventType::LeftMouseUp
+                    | NSEventType::RightMouseDown
+                    | NSEventType::RightMouseUp
+                    | NSEventType::OtherMouseDown
+                    | NSEventType::OtherMouseUp
+            ) && NSProcessInfo::processInfo().systemUptime() - event.timestamp() < 0.5
+        })
+}
+#[cfg(not(target_os = "macos"))]
+fn pointer_activation(window: &tauri::Window) -> bool {
+    match (
+        window.cursor_position(),
+        window.inner_position(),
+        window.inner_size(),
+    ) {
+        (Ok(cursor), Ok(origin), Ok(size)) => {
+            cursor.x >= origin.x as f64
+                && cursor.y >= origin.y as f64
+                && cursor.x < origin.x as f64 + size.width as f64
+                && cursor.y < origin.y as f64 + size.height as f64
+        }
+        _ => true,
+    }
+}
 #[tauri::command]
 fn set_compact(
     compact: bool,
@@ -346,6 +389,16 @@ fn set_compact(
     x: Option<f64>,
     y: Option<f64>,
     state: tauri::State<'_, Arc<AppState>>,
+) -> Result<Option<WindowBounds>, String> {
+    change_compact(compact, width, height, x, y, &state)
+}
+fn change_compact(
+    compact: bool,
+    width: Option<f64>,
+    height: Option<f64>,
+    x: Option<f64>,
+    y: Option<f64>,
+    state: &AppState,
 ) -> Result<Option<WindowBounds>, String> {
     let window = state
         .app
@@ -359,19 +412,21 @@ fn set_compact(
         let bounds = window_bounds(&window)?;
         *state.normal_bounds.lock().unwrap() = Some(bounds);
         state.compact.store(true, Ordering::Relaxed);
+        // The pill sizes itself to its controls; native edge resizing breaks that layout.
+        window.set_resizable(false).map_err(|e| e.to_string())?;
         window
-            .set_min_size(Some(tauri::LogicalSize::new(260., 140.)))
+            .set_min_size(Some(tauri::LogicalSize::new(320., 56.)))
             .map_err(|e| e.to_string())?;
         window.set_decorations(false).map_err(|e| e.to_string())?;
         window.set_always_on_top(true).map_err(|e| e.to_string())?;
         let width = width
             .filter(|v| v.is_finite())
-            .unwrap_or(320.)
-            .clamp(260., 4000.);
+            .unwrap_or(560.)
+            .clamp(320., 4000.);
         let height = height
             .filter(|v| v.is_finite())
-            .unwrap_or(180.)
-            .clamp(140., 4000.);
+            .unwrap_or(56.)
+            .clamp(56., 4000.);
         window
             .set_size(tauri::LogicalSize::new(width, height))
             .map_err(|e| e.to_string())?;
@@ -384,7 +439,11 @@ fn set_compact(
     } else {
         let overlay = window_bounds(&window)?;
         state.compact.store(false, Ordering::Relaxed);
+        // Synchronize native activations (Dock/window switcher) with the UI.
+        let _ = state.app.emit("overlay-bounds", overlay);
+        let _ = state.app.emit("compact-changed", false);
         window.set_always_on_top(false).map_err(|e| e.to_string())?;
+        window.set_resizable(true).map_err(|e| e.to_string())?;
         window.set_decorations(true).map_err(|e| e.to_string())?;
         window
             .set_min_size(Some(tauri::LogicalSize::new(900., 600.)))
@@ -414,8 +473,8 @@ fn resize_compact(
         .get_webview_window("main")
         .ok_or("Main window unavailable")?
         .set_size(tauri::LogicalSize::new(
-            width.clamp(260., 4000.),
-            height.clamp(140., 4000.),
+            width.clamp(320., 4000.),
+            height.clamp(56., 4000.),
         ))
         .map_err(|e| e.to_string())
 }
@@ -621,6 +680,7 @@ fn main() {
                     state.nt_wake.notify_one();
                 }
                 if let Some(window) = app.get_webview_window("main") {
+                    let _ = change_compact(false, None, None, None, None, &state);
                     let _ = window.unminimize();
                     let _ = window.show();
                     let _ = window.set_focus();
@@ -679,6 +739,11 @@ fn main() {
         .on_window_event(|window, event| {
             let state = window.state::<Arc<AppState>>();
             match event {
+                tauri::WindowEvent::Focused(true)
+                    if state.compact.load(Ordering::Relaxed) && !pointer_activation(window) =>
+                {
+                    let _ = change_compact(false, None, None, None, None, &state);
+                }
                 tauri::WindowEvent::Focused(false) if state.compact.load(Ordering::Relaxed) => {
                     state.clear_keys();
                 }
@@ -721,8 +786,22 @@ fn main() {
             load_workspace,
             save_workspace
         ])
-        .run(tauri::generate_context!())
-        .expect("Simulation Studio failed");
+        .build(tauri::generate_context!())
+        .expect("Simulation Studio failed")
+        .run(|app, event| {
+            #[cfg(target_os = "macos")]
+            if let tauri::RunEvent::Reopen { .. } = event {
+                let state = app.state::<Arc<AppState>>();
+                let _ = change_compact(false, None, None, None, None, &state);
+                if let Some(window) = app.get_webview_window("main") {
+                    let _ = window.unminimize();
+                    let _ = window.show();
+                    let _ = window.set_focus();
+                }
+            }
+            #[cfg(not(target_os = "macos"))]
+            let _ = (app, event);
+        });
 }
 #[cfg(test)]
 mod tests {

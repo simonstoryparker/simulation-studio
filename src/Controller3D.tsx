@@ -254,9 +254,9 @@ export default function Controller3D({ active, view, onSelect }: Props) {
       hits.forEach((mesh) =>
         mesh.material.color.setHex(
           mesh.userData.binding === selected
-            ? 0x427b80
+            ? 0x895728
             : mesh.userData.binding === hovered
-              ? 0x365d68
+              ? 0x674326
               : background,
         ),
       );
