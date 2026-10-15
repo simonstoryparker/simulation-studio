@@ -9,3 +9,5 @@ release/
 *.pfx
 .DS_Store
 src-tauri/resources/THIRD_PARTY_NOTICES.txt
+smoke-app/
+installation-results/

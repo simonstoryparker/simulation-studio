@@ -1,0 +1,58 @@
+name: Installer and updater acceptance
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Draft release to test
+        default: v0.1.0
+        required: true
+        type: string
+permissions:
+  contents: read
+jobs:
+  native:
+    environment: release
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    env:
+      GH_TOKEN: ${{ github.token }}
+      STUDIO_UPDATER_PUBLIC_KEY: ${{ vars.STUDIO_UPDATER_PUBLIC_KEY }}
+      TAG: ${{ inputs.tag }}
+      CARGO_TARGET_DIR: ${{ github.workspace }}/src-tauri/target
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      - run: npm ci
+      - run: gh release download "$env:TAG" --dir release
+        if: runner.os == 'Windows'
+      - run: gh release download "$TAG" --dir release
+        if: runner.os == 'macOS'
+      - name: Verify artifacts
+        shell: bash
+        run: node scripts/assemble-release.mjs release "${TAG#v}" --verify
+      - run: node tests/installation/prepare.mjs smoke-app
+      - run: npm ci
+        working-directory: smoke-app
+      - run: node scripts/generate-notices.mjs
+        working-directory: smoke-app
+      - run: npm run tauri -- build
+        working-directory: smoke-app
+      - run: node tests/installation/run.mjs release src-tauri/target/release/bundle installation-results
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: acceptance-${{ matrix.os }}
+          path: |
+            installation-results/*.json
+            installation-results/*.log
