@@ -7,7 +7,7 @@ for (const name of ['src', 'src-tauri', 'scripts', 'package.json', 'package-lock
   cpSync(name, join(root, name), { recursive: true, filter: path => !/[/\\](target|gen)([/\\]|$)/.test(path) });
 }
 const edit = (file, from, to) => {
-  const path = join(root, file), content = readFileSync(path, 'utf8');
+  const path = join(root, file), content = readFileSync(path, 'utf8').replaceAll('\r\n', '\n');
   if (!content.includes(from)) throw Error(`Cannot instrument ${file}`);
   writeFileSync(path, content.replace(from, to));
 };
