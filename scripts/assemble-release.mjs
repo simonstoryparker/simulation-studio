@@ -18,7 +18,7 @@ export function assemble(directory, version, verify = false) {
       hashes.set(file.name, actual);
     }
     if (!hashes.has(descriptor.updater) || !hashes.has(`${descriptor.updater}.sig`) || readFileSync(join(directory, `${descriptor.updater}.sig`), "utf8").trim() !== descriptor.signature) throw Error("Updater package/signature is missing or inconsistent.");
-    if (descriptor.platform.startsWith("darwin") && !descriptor.files.some(f => f.name.endsWith(".pkg"))) throw Error("macOS installer is missing.");
+    if (descriptor.platform.startsWith("darwin") && !descriptor.files.some(f => f.name.endsWith(".dmg"))) throw Error("macOS installer is missing.");
     manifest.platforms[descriptor.platform] = { signature: descriptor.signature, url: `https://github.com/simonstoryparker/simulation-studio/releases/download/v${version}/${encodeURIComponent(descriptor.updater)}` };
   }
   const manifestJson = JSON.stringify(manifest, null, 2) + "\n";

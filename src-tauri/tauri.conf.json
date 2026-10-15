@@ -45,7 +45,10 @@
     },
     "resources": [
       "resources/"
-    ]
+    ],
+    "macOS": {
+      "signingIdentity": "-"
+    }
   },
   "productName": "Simulation Studio",
   "plugins": {

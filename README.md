@@ -6,12 +6,12 @@ A native desktop Driver Station and NetworkTables workspace for local FRC robot 
 
 Download the installer for your platform from [Releases](https://github.com/simonstoryparker/simulation-studio/releases/latest):
 
-- **macOS:** run the signed, notarized `.pkg` for Apple Silicon or Intel. It installs `/Applications/Simulation Studio.app` and replaces any existing installation there.
-- **Windows x64:** run the signed `-setup.exe`. It installs for the current user, creates shortcuts, and upgrades an existing installation. Setup installs WebView2 if needed.
+- **macOS:** open the `.dmg` for Apple Silicon or Intel and drag **Simulation Studio** into **Applications**. When upgrading manually, close Studio and choose **Replace** for the existing app.
+- **Windows x64:** run the `-setup.exe`. It installs for the current user, creates shortcuts, and upgrades an existing installation. Setup installs WebView2 if needed.
 
 Close Studio before running a downloaded installer. There is no uninstall step for an upgrade. Node and Rust are only needed to develop the app.
 
-Signed installers are not available until the first release completes the signing and platform validation described in [release setup](docs/releases.md).
+Like [Dashshund](https://github.com/jonahsnider/dashshund), these downloads do not have Apple Developer ID/notarization or Windows Authenticode signing. Your OS may require first-launch approval. Automatic updates still require cryptographic signatures. Downloads become available after the first release completes [release setup and platform validation](docs/releases.md).
 
 ## Updates
 
@@ -72,6 +72,6 @@ npm run package
 
 `npm run check` runs the production frontend build, frontend/UI tests, release-manifest tests, Clippy, and native Rust tests. All run from this repo without any private robot checkout. `cargo test --manifest-path src-tauri/Cargo.toml protocol` includes a real local WebSocket fixture. The native telemetry tests exercise large NT catalogs and typed values. Native UI and physical-device checks remain platform acceptance tasks.
 
-`npm run package` makes a local development app; signed distribution uses the release workflow. Development builds without a configured updater key disable automatic updates.
+`npm run package` makes a local development app; distribution with signed updates uses the release workflow. Development builds without a configured updater key disable automatic updates.
 
 See [release setup and acceptance checks](docs/releases.md), [test ownership](docs/test-ownership.md), [source provenance](SOURCE.md), and [performance validation](PERFORMANCE.md). No general reuse license is granted; dependency licenses remain applicable.

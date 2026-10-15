@@ -27,7 +27,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Download and verify complete signed draft
+      - name: Download and verify complete updater-signed draft
         run: |
           [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
           test "$(gh release view "$TAG" --json isDraft --jq .isDraft)" = true

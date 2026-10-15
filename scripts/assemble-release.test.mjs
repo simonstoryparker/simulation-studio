@@ -10,7 +10,7 @@ function fixture(run) {
   try {
     for (const platform of PLATFORMS) {
       const updater = `Simulation-Studio_0.1.0_${platform}${platform.startsWith("darwin") ? ".app.tar.gz" : "-setup.exe"}`;
-      const names = [updater, `${updater}.sig`, ...(platform.startsWith("darwin") ? [`Simulation-Studio_0.1.0_${platform}.pkg`] : [])];
+      const names = [updater, `${updater}.sig`, ...(platform.startsWith("darwin") ? [`Simulation-Studio_0.1.0_${platform}.dmg`] : [])];
       const files = names.map(name => { writeFileSync(join(dir, name), name.endsWith(".sig") ? "test-signature" : name); return { name, sha256: createHash("sha256").update(readFileSync(join(dir, name))).digest("hex") }; });
       writeFileSync(join(dir, `artifact-${platform}.json`), JSON.stringify({ version: "0.1.0", platform, updater, signature: "test-signature", files }));
     }
@@ -40,4 +40,11 @@ test("publication refuses a changed update feed", () => fixture(dir => {
   assemble(dir, "0.1.0");
   writeFileSync(join(dir, "latest.json"), "{}");
   assert.throws(() => assemble(dir, "0.1.0", true), /manifest/);
+}));
+test("rejects macOS releases without the downloadable DMG", () => fixture(dir => {
+  const descriptorPath = join(dir, "artifact-darwin-aarch64.json");
+  const descriptor = JSON.parse(readFileSync(descriptorPath, "utf8"));
+  descriptor.files = descriptor.files.filter(file => !file.name.endsWith(".dmg"));
+  writeFileSync(descriptorPath, JSON.stringify(descriptor));
+  assert.throws(() => assemble(dir, "0.1.0"), /macOS installer is missing/);
 }));
