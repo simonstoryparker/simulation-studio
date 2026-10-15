@@ -7,8 +7,14 @@ on:
         default: v0.1.0
         required: true
         type: string
+      build_run_id:
+        description: Successful release build run for this draft
+        default: "38789162004"
+        required: true
+        type: string
 permissions:
   contents: read
+  actions: read
 jobs:
   native:
     environment: release
@@ -34,13 +40,15 @@ jobs:
         with:
           workspaces: src-tauri
       - run: npm ci
-      - run: gh release download "$env:TAG" --dir release
-        if: runner.os == 'Windows'
-      - run: gh release download "$TAG" --dir release
-        if: runner.os == 'macOS'
-      - name: Verify artifacts
+      - name: Download original release build artifacts (read only)
         shell: bash
-        run: node scripts/assemble-release.mjs release "${TAG#v}" --verify
+        env:
+          BUILD_RUN_ID: ${{ inputs.build_run_id }}
+        run: |
+          gh run download "$BUILD_RUN_ID" --pattern 'release-*' --dir downloaded
+          mkdir release
+          cp downloaded/release-*/* release/
+          node scripts/assemble-release.mjs release "${TAG#v}"
       - run: node tests/installation/prepare.mjs smoke-app
       - run: npm ci
         working-directory: smoke-app
