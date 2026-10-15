@@ -1,10 +1,11 @@
 !macro NSIS_HOOK_PREINSTALL
   ; The updater exits Studio before invoking setup. Manual setup must not kill a simulation.
-  nsExec::ExecToStack '"$SYSDIR\cmd.exe" /D /C "tasklist /FI \"IMAGENAME eq simulation-studio.exe\" /NH | findstr /I /C:\"simulation-studio.exe\""'
+  ; Use PowerShell directly: cmd.exe quoting can otherwise hide a failed process check.
+  nsExec::ExecToStack '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -Command "if (Get-Process -Name simulation-studio -ErrorAction SilentlyContinue) { exit 10 } else { exit 0 }"'
   Pop $0
   Pop $1
-  ${If} $0 == 0
-    MessageBox MB_OK|MB_ICONEXCLAMATION "Close Simulation Studio before installing or updating it."
+  ${If} $0 != "0"
+    MessageBox MB_OK|MB_ICONEXCLAMATION "Close Simulation Studio before installing or updating it. If this message persists, verify that Windows PowerShell is available."
     Abort
   ${EndIf}
 !macroend

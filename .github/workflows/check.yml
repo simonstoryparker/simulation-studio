@@ -26,3 +26,8 @@ jobs:
       - run: npm ci
       - run: cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
       - run: npm run check
+      - name: Compile Windows installer (not published)
+        if: runner.os == 'Windows'
+        run: |
+          node scripts/generate-notices.mjs
+          npm run tauri -- build --bundles nsis
