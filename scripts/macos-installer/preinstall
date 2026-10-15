@@ -1,0 +1,6 @@
+#!/bin/sh
+set -eu
+if /usr/bin/pgrep -f '[/]Simulation Studio.app/Contents/MacOS/simulation-studio' >/dev/null; then
+  echo "Close Simulation Studio before installing or updating it." >&2
+  exit 1
+fi

@@ -1,0 +1,11 @@
+node_modules/
+dist/
+src-tauri/target/
+src-tauri/gen/
+release/
+.env
+*.key
+*.p12
+*.pfx
+.DS_Store
+src-tauri/resources/THIRD_PARTY_NOTICES.txt

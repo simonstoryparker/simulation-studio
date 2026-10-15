@@ -1,0 +1,36 @@
+name: Publish verified release
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Signed draft tag (vX.Y.Z)
+        required: true
+        type: string
+      smoke_tested:
+        description: Clean macOS and Windows install/upgrade checks passed
+        required: true
+        type: boolean
+permissions:
+  contents: read
+jobs:
+  publish:
+    if: inputs.smoke_tested
+    environment: public-release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      TAG: ${{ inputs.tag }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Download and verify complete signed draft
+        run: |
+          [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          test "$(gh release view "$TAG" --json isDraft --jq .isDraft)" = true
+          gh release download "$TAG" --dir release
+          node scripts/assemble-release.mjs release "${TAG#v}" --verify
+      - run: gh release edit "$TAG" --draft=false --latest
