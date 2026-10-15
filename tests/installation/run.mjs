@@ -38,6 +38,21 @@ const latestProject = `${project}-latest`;
 const data = mac ? join(homedir(), 'Library/Application Support/org.team581.simulation-studio') : join(process.env.APPDATA, 'org.team581.simulation-studio');
 const workspacePath = p => join(data, 'workspaces', `${Buffer.from(p).toString('hex')}.json`);
 const workspace = { version: 2, tabs: [{id:'smoke', name:'Preserved smoke layout', widgets:[]}], activeTab:'smoke', profiles:Array.from({length:6}, (_,i)=>({source:'none',name:`Saved controller ${i}`,axes:[],buttons:[],pov:['','','','']})), keyboardPort:1, topicsCollapsed:true, matchDurations:{auto:17,transition:4,teleop:129}, overlay:{width:320,height:180,x:120,y:120,controls:['mode','keyboard'],topics:[]} };
+function assertWorkspacePreserved(projectName) {
+  const actual = JSON.parse(readFileSync(workspacePath(projectName)));
+  // Compact mode fits its content when focus changes. Its computed dimensions
+  // may change, but the user's position, controls and workspace must survive.
+  for (const key of ['width', 'height']) {
+    assert(Number.isFinite(actual.overlay[key]) && actual.overlay[key] > 0, `Valid fitted overlay ${key}`);
+  }
+  const withoutSize = value => {
+    const copy = structuredClone(value);
+    delete copy.overlay.width;
+    delete copy.overlay.height;
+    return copy;
+  };
+  assert.deepEqual(withoutSize(actual), withoutSize(workspace));
+}
 mkdirSync(dirname(workspacePath(project)), { recursive:true });
 for (const p of [project, latestProject]) writeFileSync(workspacePath(p), JSON.stringify(workspace));
 let frames = [], phase = 'initial', badFrame;
@@ -104,13 +119,13 @@ try {
   stop(); await wait(1500);
   install(); // Re-running a downloaded installer must upgrade in place.
   assert.equal(hash(executable), productionHash);
-  assert.deepEqual(JSON.parse(readFileSync(workspacePath(project))),workspace);
+  assertWorkspacePreserved(project);
   install(true);
   assert(existsSync(obsolete), 'Older package must install the obsolete resource');
   install(); // Manual older-to-newer upgrade, including removal of old package files.
   assert.equal(hash(executable), productionHash);
   assert(!existsSync(obsolete), 'Manual upgrade must remove obsolete bundled files');
-  assert.deepEqual(JSON.parse(readFileSync(workspacePath(project))),workspace);
+  assertWorkspacePreserved(project);
   for (const testMode of ['offline','interrupted','tampered']) {
     install(true); const oldHash=hash(executable);
     mode=testMode;rmSync(join(output,'result.json'),{force:true});
@@ -128,7 +143,7 @@ try {
   await until(()=>hash(executable)===productionHash,'real updater replaces old application',120000);
   await until(()=>frames.filter(f=>f.phase==='updated').length>=10,'updated production app relaunches with latest session',120000);
   assert(!badFrame,'Restart must never enable simulation or restore held inputs');
-  assert.deepEqual(JSON.parse(readFileSync(workspacePath(latestProject))),workspace);
+  assertWorkspacePreserved(latestProject);
   assert(!existsSync(obsolete),'Obsolete bundled files must be removed');
   writeFileSync(join(output,'acceptance.json'),JSON.stringify({platform,version:manifest.version,passed:['native install','manual replacement','workspace preservation','offline failure','interrupted download','invalid signature','simulation update deferral','reconnect blocked during installation','actual updater replacement','obsolete resource removal','disabled relaunch','latest session restored']},null,2));
   console.log(`PASS ${platform}: installation, replacement, updater failures, safe restart and preserved workspace`);
