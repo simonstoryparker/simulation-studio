@@ -105,6 +105,12 @@ try {
   install(); // Re-running a downloaded installer must upgrade in place.
   assert.equal(hash(executable), productionHash);
   assert.deepEqual(JSON.parse(readFileSync(workspacePath(project))),workspace);
+  install(true);
+  assert(existsSync(obsolete), 'Older package must install the obsolete resource');
+  install(); // Manual older-to-newer upgrade, including removal of old package files.
+  assert.equal(hash(executable), productionHash);
+  assert(!existsSync(obsolete), 'Manual upgrade must remove obsolete bundled files');
+  assert.deepEqual(JSON.parse(readFileSync(workspacePath(project))),workspace);
   for (const testMode of ['offline','interrupted','tampered']) {
     install(true); const oldHash=hash(executable);
     mode=testMode;rmSync(join(output,'result.json'),{force:true});

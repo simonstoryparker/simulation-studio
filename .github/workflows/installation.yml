@@ -4,12 +4,12 @@ on:
     inputs:
       tag:
         description: Draft release to test
-        default: v0.1.0
+        default: v0.1.1
         required: true
         type: string
       build_run_id:
         description: Successful release build run for this draft
-        default: "38789162004"
+        default: "38795678840"
         required: true
         type: string
       windows_only:
