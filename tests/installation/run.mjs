@@ -19,6 +19,7 @@ const app = mac ? join(root, 'Simulation Studio.app') : root;
 const executable = mac ? join(app, 'Contents/MacOS/simulation-studio') : join(app, 'simulation-studio.exe');
 const fixtureBundle = mac ? join(fixture, 'macos/Simulation Studio.app') : join(fixture, 'nsis');
 const installer = manifest.files.find(f => f.name.endsWith(mac ? '.dmg' : '-setup.exe')).name;
+const obsolete = join(app,mac?'Contents/Resources/resources/smoke-obsolete.txt':'resources/smoke-obsolete.txt');
 const updaterBytes = readFileSync(join(assets, manifest.updater));
 const hash = path => createHash('sha256').update(readFileSync(path)).digest('hex');
 const command = (bin, args, extra = {}) => {
@@ -115,14 +116,14 @@ try {
     child.kill();
   }
   mode='install';phase='updated';rmSync(join(output,'result.json'),{force:true});
-  install(true); launch('install');
+  install(true); assert(existsSync(obsolete), 'Older test package must contain obsolete resource'); launch('install');
   await until(()=>existsSync(join(output,'result.json')),'update ready and simulation guards tested');
   assert.equal(JSON.parse(readFileSync(join(output,'result.json'))).ok,true);
   await until(()=>hash(executable)===productionHash,'real updater replaces old application',120000);
   await until(()=>frames.filter(f=>f.phase==='updated').length>=10,'updated production app relaunches with latest session',120000);
   assert(!badFrame,'Restart must never enable simulation or restore held inputs');
   assert.deepEqual(JSON.parse(readFileSync(workspacePath(latestProject))),workspace);
-  assert(!existsSync(join(app,mac?'Contents/Resources/resources/smoke-obsolete.txt':'resources/smoke-obsolete.txt')),'Obsolete bundled files must be removed');
+  assert(!existsSync(obsolete),'Obsolete bundled files must be removed');
   writeFileSync(join(output,'acceptance.json'),JSON.stringify({platform,version:manifest.version,passed:['native install','manual replacement','workspace preservation','offline failure','interrupted download','invalid signature','simulation update deferral','reconnect blocked during installation','actual updater replacement','obsolete resource removal','disabled relaunch','latest session restored']},null,2));
   console.log(`PASS ${platform}: installation, replacement, updater failures, safe restart and preserved workspace`);
 } finally {
