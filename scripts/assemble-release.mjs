@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 export const PLATFORMS = ["darwin-aarch64", "darwin-x86_64", "windows-x86_64"];
 export function assemble(directory, version, verify = false) {
   if (!/^\d+\.\d+\.\d+$/.test(version)) throw Error("Only stable semantic versions can be published.");
-  const descriptors = readdirSync(directory).filter(name => name.startsWith("artifact-") && name.endsWith(".json")).map(name => JSON.parse(readFileSync(join(directory, name), "utf8")));
+  const descriptors = readdirSync(directory).filter(name => name.startsWith("artifact-") && name.endsWith(".json")).sort().map(name => JSON.parse(readFileSync(join(directory, name), "utf8")));
   if (descriptors.length !== PLATFORMS.length || new Set(descriptors.map(d => d.platform)).size !== PLATFORMS.length || descriptors.some(d => !PLATFORMS.includes(d.platform))) throw Error("Every supported platform must have exactly one artifact descriptor.");
   const manifest = { version, platforms: {} };
   const hashes = new Map();
