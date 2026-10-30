@@ -1,4 +1,4 @@
-# Test ownership and extraction audit
+# Test ownership
 
 Source: `team581/offseason-2026@simon-simulation-desktop-app`, commit `8c4b4808b260c02cf936f18576adf0edf0168106`.
 
@@ -12,6 +12,6 @@ Source: `team581/offseason-2026@simon-simulation-desktop-app`, commit `8c4b4808b
 | Java `SimulationControlBridgeTest`, `SimulationAppFixture`, installed-app discovery tests | Robot repo |
 | Robot mechanism, swerve, turret, and HAL behavior tests | Robot repo |
 
-Audited all branch paths containing test, spec, and fixture, and searched outside the app directory for Simulation Studio references. There were no other app test suites outside `sim-app/`; the Java-directory UI specification was the misplaced app-specific supporting document. Robot behavior tests changed on the source branch stay with robot code.
+The extraction audit found no other app test suites outside `sim-app/`. The UI requirements were moved from the Java test directory into this repository. Robot behavior tests stay with the robot code.
 
 App checks require no private checkout, robot assets, WPILib JVM, or GitHub credentials. Add new app tests here, including controller mapping, UI, workspace migrations, NT clients, installation, and updates. Keep Java launcher/bridge/HAL integration tests with the robot. Shared wire-protocol vectors are intentionally copied and independently tested on both sides.

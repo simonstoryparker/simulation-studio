@@ -1,7 +1,6 @@
 import { memo, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import {
-  getTopic,
   useSubscriptions,
   useTopic,
   useDescriptor,

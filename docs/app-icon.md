@@ -1,10 +1,8 @@
 # App icon
 
-The source is `src-tauri/icons/icon.png`. The existing S icon was recolored with the built-in image generation editor using this prompt:
+The source is [`src-tauri/icons/icon.png`](../src-tauri/icons/icon.png), a 512 × 512 image. The S glyph has a diagonal gradient from maroon (`#800020`) at the top right to orange (`#ff9b42`) at the lower left, on a dark charcoal background. It was recolored using an image generation editor.
 
-> Edit target: the provided Simulation Studio app icon. precise-object-edit. Make ONLY a color change to the existing teal S glyph, replacing its teal with a smooth diagonal gradient: deep team maroon #800020 at the TOP RIGHT of the S, through warm red/copper, ending in bright team orange #ff9b42 at the LOWER LEFT. Preserve the exact S silhouette, placement, size, dark outline, soft edge treatment and dark charcoal background. Do not redesign, sharpen, add objects, add text, change the framing, or alter anything outside the S. Keep square icon format, 512x512 if possible.
-
-The result was resized to 512 × 512. Desktop icon sizes and macOS/Windows bundles were generated with the Tauri icon command:
+Desktop icon sizes and macOS/Windows bundles can be regenerated with the Tauri icon command:
 
 ```sh
 npm run tauri -- icon src-tauri/icons/icon.png --output /tmp/simulation-studio-icons

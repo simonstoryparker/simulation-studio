@@ -21,9 +21,7 @@ def sample(pids):
     )
     rows = [line.split() for line in result.stdout.splitlines() if line.strip()]
     if len(rows) != len(pids):
-        raise RuntimeError(
-            "A measured process exited; choose the current app/webview PIDs"
-        )
+        raise RuntimeError("A measured process exited; choose the current app/webview PIDs")
     return {
         int(pid): {"rssKiB": int(rss), "cpuSeconds": cpu_seconds(cpu)}
         for pid, rss, cpu in rows

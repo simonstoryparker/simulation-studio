@@ -609,42 +609,6 @@ function ControllerPanel({
     </section>
   );
 }
-function AxisFields({
-  index,
-  axis,
-  change,
-}: {
-  index: number;
-  axis: PortProfile["axes"][number];
-  change: (axis: PortProfile["axes"][number]) => void;
-}) {
-  return (
-    <>
-      <span>{index}</span>
-      {(["input", "negative", "positive"] as const).map((key) => (
-        <input
-          key={key}
-          value={axis[key]}
-          onChange={(e) => change({ ...axis, [key]: e.target.value })}
-        />
-      ))}
-      <input
-        type="checkbox"
-        checked={axis.invert}
-        onChange={(e) => change({ ...axis, invert: e.target.checked })}
-      />
-      <input
-        type="number"
-        min={0}
-        max={0.99}
-        step={0.01}
-        value={axis.deadband}
-        onChange={(e) => change({ ...axis, deadband: Number(e.target.value) })}
-      />
-    </>
-  );
-}
-
 export default function App() {
   const [workspace, setWorkspace] = useState<Workspace>(emptyWorkspace),
     [ready, setReady] = useState(false),

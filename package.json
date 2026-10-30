@@ -21,8 +21,9 @@
     "dev": "vite",
     "test": "vitest run src",
     "build": "tsc --noEmit && vite build",
-    "format": "prettier --write src vite.config.ts && cargo fmt --manifest-path src-tauri/Cargo.toml",
-    "check": "npm run build && npm test && npm run test:release && cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings && cargo test --manifest-path src-tauri/Cargo.toml",
+    "format": "prettier --write \"**/*.{js,jsx,mjs,cjs,ts,tsx,json,css,html,yml,yaml}\" && cargo fmt --manifest-path src-tauri/Cargo.toml && rustfmt --edition 2021 tests/installation/driver.rs",
+    "format:check": "prettier --check \"**/*.{js,jsx,mjs,cjs,ts,tsx,json,css,html,yml,yaml}\" && cargo fmt --manifest-path src-tauri/Cargo.toml -- --check && rustfmt --edition 2021 --check tests/installation/driver.rs",
+    "check": "npm run format:check && npm run build && npm test && npm run test:release && cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings && cargo test --manifest-path src-tauri/Cargo.toml",
     "tauri": "tauri",
     "test:release": "node --test scripts/*.test.mjs"
   },

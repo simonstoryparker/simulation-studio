@@ -27,9 +27,7 @@
   "version": "0.1.2",
   "bundle": {
     "active": true,
-    "targets": [
-      "app"
-    ],
+    "targets": ["app"],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -46,9 +44,7 @@
         "type": "downloadBootstrapper"
       }
     },
-    "resources": [
-      "resources/"
-    ],
+    "resources": ["resources/"],
     "macOS": {
       "signingIdentity": "-"
     }

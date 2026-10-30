@@ -181,9 +181,7 @@ describe("robot state buttons", () => {
       await ready();
       if (compact) await focus(false);
       const selected = (name: string) =>
-        screen
-          .getByRole("button", { name })
-          .getAttribute("aria-pressed");
+        screen.getByRole("button", { name }).getAttribute("aria-pressed");
       const report = async (enabled: boolean, estop = false) => {
         await act(async () => {
           native.listeners.get("applied")?.({
@@ -199,9 +197,7 @@ describe("robot state buttons", () => {
       await report(false);
       expect(selected("Enable")).toBe("false");
       expect(selected("Disable")).toBe("true");
-      fireEvent.click(
-        screen.getByRole("button", { name: "Enable" }),
-      );
+      fireEvent.click(screen.getByRole("button", { name: "Enable" }));
       expect(selected("Enable")).toBe("false");
       expect(selected("Disable")).toBe("true");
       await report(true);

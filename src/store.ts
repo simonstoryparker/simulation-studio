@@ -1,6 +1,11 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useEffect, useSyncExternalStore } from "react";
-import type { TelemetryBatch, TopicDescriptor, TopicValue } from "./types";
+import type {
+  Joystick,
+  TelemetryBatch,
+  TopicDescriptor,
+  TopicValue,
+} from "./types";
 const topics = new Map<string, TopicDescriptor>(),
   ids = new Map<number, string>(),
   values = new Map<string, TopicValue>();
@@ -148,7 +153,6 @@ export function useSubscriptions(names: string[]) {
   }, [key]);
 }
 
-import type { Joystick } from "./types";
 let sticks: Joystick[] = [];
 const stickListeners = new Set<() => void>();
 export function updateSticks(next: Joystick[]) {

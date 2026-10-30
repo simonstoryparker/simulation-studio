@@ -1,7 +1,9 @@
 import { spawnSync } from "node:child_process";
 import { resolve } from "node:path";
 import "./check-prerequisites.mjs";
-const notices = spawnSync(process.execPath, ["scripts/generate-notices.mjs"], { stdio: "inherit" });
+const notices = spawnSync(process.execPath, ["scripts/generate-notices.mjs"], {
+  stdio: "inherit",
+});
 if (notices.status !== 0) process.exit(notices.status ?? 1);
 const flags =
   process.platform === "darwin" ? ["--bundles", "app"] : ["--no-bundle"];

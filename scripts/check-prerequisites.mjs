@@ -4,10 +4,15 @@ import { homedir } from "node:os";
 import { delimiter, join } from "node:path";
 
 // Editors and Gradle daemons may retain the PATH from before rustup was installed.
-const cargoBin = join(process.env.CARGO_HOME || join(homedir(), ".cargo"), "bin");
+const cargoBin = join(
+  process.env.CARGO_HOME || join(homedir(), ".cargo"),
+  "bin",
+);
 const cargoExecutable = process.platform === "win32" ? "cargo.exe" : "cargo";
 if (existsSync(join(cargoBin, cargoExecutable))) {
-  process.env.PATH = [process.env.PATH, cargoBin].filter(Boolean).join(delimiter);
+  process.env.PATH = [process.env.PATH, cargoBin]
+    .filter(Boolean)
+    .join(delimiter);
 }
 
 for (const [binary, args] of [
