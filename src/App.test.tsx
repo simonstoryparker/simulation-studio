@@ -38,6 +38,7 @@ vi.mock("react-grid-layout", () => ({
   default: () => null,
   WidthProvider: () => () => null,
 }));
+vi.mock("./Controller3D", () => ({ default: () => null }));
 
 beforeEach(() => {
   vi.stubGlobal("__APP_VERSION__", "0.1.1");
@@ -59,6 +60,7 @@ beforeEach(() => {
         controlConnected: true,
       };
     if (name === "load_workspace") return null;
+    if (name === "update_status") return { phase: "current", downloaded: 0 };
   });
 });
 afterEach(() => {
@@ -77,6 +79,173 @@ async function focus(payload: boolean) {
     native.focus?.({ payload });
   });
 }
+
+describe("connection settings", () => {
+  it("submits edited endpoints and loads the connected project's workspace", async () => {
+    await ready();
+    fireEvent.click(screen.getByRole("button", { name: "Studio settings" }));
+    fireEvent.change(screen.getByLabelText("Project folder"), {
+      target: { value: "/robots/practice" },
+    });
+    fireEvent.change(screen.getByLabelText("Robot control endpoint"), {
+      target: { value: "ws://127.0.0.1:5810" },
+    });
+    fireEvent.change(screen.getByLabelText("NetworkTables endpoint"), {
+      target: { value: "ws://127.0.0.1:5811" },
+    });
+    fireEvent.submit(
+      screen.getByRole("button", { name: /^Connect$/ }).closest("form")!,
+    );
+    await waitFor(() =>
+      expect(native.invoke).toHaveBeenCalledWith("connect", {
+        endpoints: {
+          project: "/robots/practice",
+          control: "ws://127.0.0.1:5810",
+          nt: "ws://127.0.0.1:5811",
+        },
+      }),
+    );
+    await waitFor(() =>
+      expect(native.invoke).toHaveBeenCalledWith("load_workspace", {
+        project: "/robots/practice",
+      }),
+    );
+    await screen.findByText("practice", { selector: ".project-title strong" });
+  });
+});
+
+describe("driver controls", () => {
+  it("starts with no alliance station selected and clears a station when clicked again", async () => {
+    await ready();
+    const stations = within(
+      screen.getByRole("group", { name: "Alliance station" }),
+    );
+    expect(stations.queryByRole("button", { name: "Unknown" })).toBeNull();
+    expect(stations.queryAllByRole("button", { pressed: true })).toHaveLength(
+      0,
+    );
+    const red = stations.getByRole("button", { name: "Red station 2" });
+    fireEvent.click(red);
+    await waitFor(() =>
+      expect(native.invoke).toHaveBeenCalledWith(
+        "set_control",
+        expect.objectContaining({ enabled: false, alliance: "Red2" }),
+      ),
+    );
+    expect(red.getAttribute("aria-pressed")).toBe("true");
+    fireEvent.click(red);
+    await waitFor(() =>
+      expect(native.invoke).toHaveBeenCalledWith(
+        "set_control",
+        expect.objectContaining({ enabled: false, alliance: "Unknown" }),
+      ),
+    );
+    expect(stations.queryAllByRole("button", { pressed: true })).toHaveLength(
+      0,
+    );
+    fireEvent.click(stations.getByRole("button", { name: "Blue station 1" }));
+    fireEvent.click(stations.getByRole("button", { name: "Red station 3" }));
+    expect(stations.getAllByRole("button", { pressed: true })).toHaveLength(1);
+    expect(
+      stations
+        .getByRole("button", { name: "Red station 3" })
+        .getAttribute("aria-pressed"),
+    ).toBe("true");
+  });
+  it("only offers moving the keyboard on a different port and labels its current port with an icon", async () => {
+    await ready();
+    fireEvent.click(screen.getByRole("button", { name: "Controllers" }));
+    const ports = document.querySelector(".port-list")! as HTMLElement;
+    expect(within(ports).getByRole("img", { name: "Keyboard" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Keyboard here" })).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Move keyboard here" }),
+    ).toBeNull();
+    fireEvent.click(
+      within(ports).getByRole("button", { name: /Port 1.*Operator/ }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Move keyboard here" }));
+    await waitFor(() =>
+      expect(native.invoke).toHaveBeenCalledWith("set_keyboard_port", {
+        port: 1,
+      }),
+    );
+    expect(
+      screen.queryByRole("button", { name: "Move keyboard here" }),
+    ).toBeNull();
+  });
+  it("shows hot-plugged gamepads and assigns them from the control panel", async () => {
+    await ready();
+    await act(async () =>
+      native.listeners.get("devices")?.({
+        payload: [
+          { id: "pad-a", name: "Driver controller" },
+          { id: "pad-b", name: "Operator controller" },
+        ],
+      }),
+    );
+    const driver = screen.getByRole("group", {
+      name: "Driver controller port",
+    });
+    const operator = screen.getByRole("group", {
+      name: "Operator controller port",
+    });
+    fireEvent.click(
+      within(driver).getByRole("button", { name: "Port 0: Driver" }),
+    );
+    await waitFor(() =>
+      expect(
+        within(driver)
+          .getByRole("button", { name: "Port 0: Driver" })
+          .getAttribute("aria-pressed"),
+      ).toBe("true"),
+    );
+    fireEvent.click(
+      within(operator).getByRole("button", { name: "Port 1: Operator" }),
+    );
+    await waitFor(() =>
+      expect(
+        within(operator)
+          .getByRole("button", { name: "Port 1: Operator" })
+          .getAttribute("aria-pressed"),
+      ).toBe("true"),
+    );
+    fireEvent.click(
+      within(driver).getByRole("button", { name: "Port 1: Operator" }),
+    );
+    await waitFor(() =>
+      expect(
+        within(operator)
+          .getByRole("button", { name: "Port 0: Driver" })
+          .getAttribute("aria-pressed"),
+      ).toBe("true"),
+    );
+    expect(native.invoke).toHaveBeenLastCalledWith(
+      "set_profiles",
+      expect.objectContaining({
+        profiles: expect.arrayContaining([
+          expect.objectContaining({
+            name: "Operator",
+            source: "gamepad:pad-a",
+          }),
+          expect.objectContaining({ name: "Driver", source: "gamepad:pad-b" }),
+        ]),
+      }),
+    );
+  });
+  it("keeps the robot disabled when Full Match is selected and shows its durations", async () => {
+    await ready();
+    fireEvent.click(screen.getByRole("button", { name: "Full Match" }));
+    await waitFor(() =>
+      expect(native.invoke).toHaveBeenCalledWith(
+        "set_control",
+        expect.objectContaining({ enabled: false, estop: false, mode: "auto" }),
+      ),
+    );
+    expect(screen.getByText("Full Match durations (seconds)")).toBeTruthy();
+    expect(screen.getByLabelText("Disabled transition")).toBeTruthy();
+  });
+});
 
 describe("compact overlay", () => {
   it("defaults to ports 0/1, dismisses automatic mode, and allows explicit reopening", async () => {

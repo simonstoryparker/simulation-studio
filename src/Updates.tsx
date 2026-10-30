@@ -68,52 +68,56 @@ export function Updates({
     unavailable: "Updates unavailable in this build.",
   };
   return (
-    <section className="settings-card">
-      <h2>App updates</h2>
-      <p>Simulation Studio {__APP_VERSION__}</p>
-      <p role="status">
-        {labels[status.phase] ?? "Updates check automatically."}
-      </p>
-      {status.phase === "downloading" && (
-        <progress
-          value={status.total ? status.downloaded : undefined}
-          max={status.total}
-        />
-      )}
-      {status.message && <p>{status.message}</p>}
-      {error && <p role="alert">{error}</p>}
-      {status.phase === "ready" && (
-        <>
-          <button disabled={connected || busy} onClick={() => void restart()}>
-            Restart to update
+    <section className="settings-card update-settings">
+      <div className="settings-section-intro">
+        <h2>App updates</h2>
+        <span className="settings-save-note">
+          Simulation Studio {__APP_VERSION__}
+        </span>
+      </div>
+      <div className="settings-panel">
+        <p role="status">
+          {labels[status.phase] ?? "Updates check automatically."}
+        </p>
+        {status.phase === "downloading" && (
+          <progress
+            value={status.total ? status.downloaded : undefined}
+            max={status.total}
+          />
+        )}
+        {status.message && <p>{status.message}</p>}
+        {error && <p role="alert">{error}</p>}
+        {status.phase === "ready" && (
+          <>
+            <button disabled={connected || busy} onClick={() => void restart()}>
+              Restart to update
+            </button>
+            {connected && <p>Stop the simulation before restarting Studio.</p>}
+          </>
+        )}
+        <div className="settings-actions">
+          <button
+            disabled={
+              busy ||
+              ["checking", "downloading", "installing"].includes(status.phase)
+            }
+            onClick={() => {
+              setError("");
+              void invoke("check_update").catch((e) => setError(String(e)));
+            }}
+          >
+            Check for updates
           </button>
-          {connected && <p>Stop the simulation before restarting Studio.</p>}
-        </>
-      )}
-      <button
-        disabled={
-          busy ||
-          ["checking", "downloading", "installing"].includes(status.phase)
-        }
-        onClick={() => {
-          setError("");
-          void invoke("check_update").catch((e) => setError(String(e)));
-        }}
-      >
-        Check for updates
-      </button>
-      <button
-        disabled={busy}
-        onClick={() =>
-          void invoke("open_downloads").catch((e) => setError(String(e)))
-        }
-      >
-        Download installer
-      </button>
-      <p className="hint">
-        Updates download automatically. Restarting replaces this installation
-        and keeps your workspaces.
-      </p>
+          <button
+            disabled={busy}
+            onClick={() =>
+              void invoke("open_downloads").catch((e) => setError(String(e)))
+            }
+          >
+            Download installer
+          </button>
+        </div>
+      </div>
     </section>
   );
 }

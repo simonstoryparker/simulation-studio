@@ -131,6 +131,54 @@ export function folderCandidates(
       return [{ name, type: t.type, chooser: !!root }];
     });
 }
+
+export function controlCandidates(
+  prefix: string,
+  topics: TopicDescriptor[],
+  choosers: Set<string>,
+  existing: WidgetInstance[],
+) {
+  const editable = new Set([
+    "boolean",
+    "int",
+    "float",
+    "double",
+    "string",
+    "json",
+    "boolean[]",
+    "int[]",
+    "float[]",
+    "double[]",
+    "string[]",
+  ]);
+  return folderCandidates(prefix, topics, choosers, existing).filter(
+    (topic) =>
+      topic.chooser ||
+      (editable.has(topic.type) &&
+        !topic.name.split("/").some((part) => part.startsWith("."))),
+  );
+}
+
+export function assignController(
+  profiles: PortProfile[],
+  deviceId: string,
+  port: number | null,
+): PortProfile[] {
+  const source = `gamepad:${deviceId}`;
+  const previousPort = profiles.findIndex(
+    (profile) => profile.source === source,
+  );
+  const displacedSource = port === null ? "none" : profiles[port].source;
+  return profiles.map((profile, index) => ({
+    ...profile,
+    source:
+      index === port
+        ? source
+        : index === previousPort
+          ? displacedSource
+          : profile.source,
+  }));
+}
 export function parseValue(type: string, text: string): NtValue {
   if (type.endsWith("[]")) {
     const array: unknown = JSON.parse(text);

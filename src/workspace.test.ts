@@ -5,9 +5,47 @@ import {
   parseValue,
   folderCandidates,
   createWidget,
+  controlCandidates,
+  assignController,
 } from "./workspace";
 import type { WidgetInstance } from "./types";
 describe("generic workspace", () => {
+  it("offers editable controls and one entry per chooser, excluding raw data and metadata", () => {
+    const topics = [
+      { name: "/Robot/enabled", type: "boolean" },
+      { name: "/Robot/target", type: "double" },
+      { name: "/Robot/pose", type: "struct:Pose2d" },
+      { name: "/Robot/.type", type: "string" },
+      { name: "/Auto/.type", type: "string" },
+      { name: "/Auto/options", type: "string[]" },
+      { name: "/Auto/selected", type: "string" },
+    ].map((topic, id) => ({ ...topic, id, properties: {} }));
+    expect(
+      controlCandidates("/", topics, new Set(["/Auto"]), []).map(
+        (topic) => topic.name,
+      ),
+    ).toEqual(["/Auto", "/Robot/enabled", "/Robot/target"]);
+  });
+  it("moves and swaps connected controllers without losing port bindings or duplicating a device", () => {
+    const { profiles } = emptyWorkspace();
+    profiles[0].source = "gamepad:driver";
+    profiles[1].source = "gamepad:operator";
+    const swapped = assignController(profiles, "driver", 1);
+    expect(swapped.map((profile) => profile.source)).toEqual([
+      "gamepad:operator",
+      "gamepad:driver",
+      "none",
+      "none",
+      "none",
+      "none",
+    ]);
+    expect(swapped[0].axes).toEqual(profiles[0].axes);
+    expect(swapped[1].name).toBe("Operator");
+    const moved = assignController(swapped, "driver", 4);
+    expect(moved[1].source).toBe("none");
+    expect(moved[4].source).toBe("gamepad:driver");
+    expect(profiles[0].source).toBe("gamepad:driver");
+  });
   it("round trips and rejects malformed widgets", () => {
     const w = emptyWorkspace();
     expect(validateWorkspace(JSON.parse(JSON.stringify(w)))).toEqual(w);

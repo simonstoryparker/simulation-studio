@@ -11,3 +11,4 @@ release/
 src-tauri/resources/THIRD_PARTY_NOTICES.txt
 smoke-app/
 installation-results/
+.taste-skill/

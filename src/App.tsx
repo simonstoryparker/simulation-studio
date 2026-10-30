@@ -18,15 +18,14 @@ import {
   getChoosers,
   getTopic,
   useCatalog,
-  useSubscriptions,
-  useTopic,
   updateSticks,
   useSticks,
 } from "./store";
 import {
   createWidget,
   emptyWorkspace,
-  folderCandidates,
+  controlCandidates,
+  assignController,
   validateWorkspace,
 } from "./workspace";
 import { registry, WidgetBody } from "./widgets";
@@ -49,30 +48,164 @@ const nextFrame = () =>
 const command = <T,>(name: string, args?: Record<string, unknown>) =>
   invoke<T>(name, args);
 
+function StudioMark() {
+  return (
+    <svg
+      className="studio-mark"
+      viewBox="0 0 32 32"
+      fill="none"
+      aria-hidden="true"
+    >
+      <path
+        d="M3 23h7l5-14 5 14h9M3 9h5m16 0h5"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function Icon({
+  name,
+}: {
+  name:
+    "settings" | "compact" | "import" | "export" | "keyboard" | "controller";
+}) {
+  return (
+    <svg
+      width="18"
+      height="18"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      {name === "settings" ? (
+        <>
+          <path d="m9.5 3-.6 2.2-1.8 1L5 5.7 2.5 10l1.6 1.6v.8L2.5 14 5 18.3l2.1-.5 1.8 1 .6 2.2h5l.6-2.2 1.8-1 2.1.5 2.5-4.3-1.6-1.6v-.8l1.6-1.6L19 5.7l-2.1.5-1.8-1L14.5 3z" />
+          <circle cx="12" cy="12" r="3" />
+        </>
+      ) : name === "compact" ? (
+        <>
+          <rect x="3" y="4" width="18" height="16" rx="2" />
+          <path d="M3 9h18" />
+          <rect x="12" y="12" width="6" height="5" rx=".5" />
+        </>
+      ) : name === "keyboard" ? (
+        <>
+          <rect x="2" y="5" width="20" height="14" rx="2" />
+          <path d="M6 9h.01M10 9h.01M14 9h.01M18 9h.01M6 12h.01M10 12h.01M14 12h.01M18 12h.01M7 15h10" />
+        </>
+      ) : name === "controller" ? (
+        <>
+          <path d="M8 7h8c2 0 3.2 1.5 3.7 3.3l1.1 5.4c.5 2.5-1.7 3.8-3.2 2.1L15 15H9l-2.6 2.8c-1.5 1.7-3.7.4-3.2-2.1l1.1-5.4C4.8 8.5 6 7 8 7Z" />
+          <path d="M8 10v4m-2-2h4m6-2h.01m2 3h.01" />
+        </>
+      ) : (
+        <>
+          <path d="M4 15v5h16v-5" />
+          {name === "import" ? (
+            <path d="M12 3v12m-4-4 4 4 4-4" />
+          ) : (
+            <path d="M12 15V3m-4 4 4-4 4 4" />
+          )}
+        </>
+      )}
+    </svg>
+  );
+}
+
+function InputMark({
+  kind,
+  label,
+  number,
+}: {
+  kind: "keyboard" | "controller";
+  label: string;
+  number?: number;
+}) {
+  return (
+    <span className="input-mark" role="img" aria-label={label} title={label}>
+      <Icon name={kind} />
+      {number !== undefined && <sub>{number}</sub>}
+    </span>
+  );
+}
+
+function PortInputs({
+  profile,
+  port,
+  keyboardPort,
+  devices,
+}: {
+  profile: PortProfile;
+  port: number;
+  keyboardPort: number;
+  devices: Device[];
+}) {
+  const deviceIndex = devices.findIndex(
+    (device) => profile.source === `gamepad:${device.id}`,
+  );
+  return (
+    <span className="port-inputs">
+      {keyboardPort === port && <InputMark kind="keyboard" label="Keyboard" />}
+      {profile.source.startsWith("gamepad:") && (
+        <InputMark
+          kind="controller"
+          label={
+            deviceIndex >= 0
+              ? `Controller ${deviceIndex + 1}: ${devices[deviceIndex].name}`
+              : "Controller disconnected"
+          }
+          number={
+            devices.length > 1 && deviceIndex >= 0 ? deviceIndex + 1 : undefined
+          }
+        />
+      )}
+    </span>
+  );
+}
+
 function TopicRow({
   topic,
   add,
+  added,
 }: {
-  topic: TopicDescriptor;
+  topic: { name: string; type: string; chooser: boolean };
   add: (name: string, type: string) => void;
+  added: boolean;
 }) {
-  const value = useTopic(topic.name);
-  useSubscriptions([topic.name]);
+  const parts = topic.name.split("/").filter(Boolean);
   return (
     <button
       className="topic-row"
       title={topic.name}
+      disabled={added}
+      aria-label={`${added ? "Added" : "Add"} ${topic.name}`}
       onClick={() => add(topic.name, topic.type)}
-      draggable
-      onDragStart={(e) =>
-        e.dataTransfer.setData("application/x-nt-topic", JSON.stringify(topic))
+      draggable={!added}
+      onDragStart={(event) =>
+        event.dataTransfer.setData(
+          "application/x-nt-topic",
+          JSON.stringify(topic),
+        )
       }
     >
-      <span>{topic.name}</span>
+      <span>{parts.at(-1)}</span>
       <small>
-        {topic.type} · {String(value?.value.data ?? "—").slice(0, 48)}
+        {topic.chooser
+          ? "Chooser"
+          : topic.type === "boolean"
+            ? "Toggle"
+            : topic.type}{" "}
+        · {parts.slice(0, -1).join("/") || "/"}
       </small>
-      <b>+</b>
+      <b>{added ? "Added" : "+"}</b>
     </button>
   );
 }
@@ -80,17 +213,23 @@ const Browser = memo(function Browser({
   add,
   openAll,
   busy,
+  widgets,
+  expanded,
+  onToggle,
 }: {
   add: (name: string, type: string) => void;
   openAll: (prefix: string) => void;
   busy: boolean;
+  widgets: WidgetInstance[];
+  expanded: boolean;
+  onToggle: () => void;
 }) {
   const catalog = useCatalog();
-  const [search, setSearch] = useState(""),
-    [folder, setFolder] = useState("/"),
-    [scroll, setScroll] = useState(0);
+  const [search, setSearch] = useState("");
+  const [filterOpen, setFilterOpen] = useState(false);
+  const [scroll, setScroll] = useState(0);
   const viewport = useRef<HTMLDivElement>(null);
-  const [height, setHeight] = useState(400);
+  const [height, setHeight] = useState(200);
   useEffect(() => {
     if (!viewport.current) return;
     const observer = new ResizeObserver((entries) =>
@@ -98,107 +237,119 @@ const Browser = memo(function Browser({
     );
     observer.observe(viewport.current);
     return () => observer.disconnect();
-  }, []);
-  const rows = useMemo(() => {
-    const prefix = folder === "/" ? "/" : folder.replace(/\/$/, "") + "/";
-    if (search.trim())
-      return catalog
-        .filter(
-          (t) =>
-            t.name.startsWith(prefix) &&
-            t.name.toLowerCase().includes(search.toLowerCase()),
-        )
-        .map((t) => ({ key: t.name, topic: t }));
-    const dirs = new Set<string>();
-    const direct: { key: string; topic?: TopicDescriptor }[] = [];
-    for (const t of catalog) {
-      if (!t.name.startsWith(prefix)) continue;
-      const rest = t.name.slice(prefix.length);
-      if (rest.includes("/")) dirs.add(prefix + rest.split("/")[0]);
-      else direct.push({ key: t.name, topic: t });
-    }
-    return [
-      ...[...dirs].sort().map((key) => ({ key, topic: undefined })),
-      ...direct,
-    ];
-  }, [catalog, folder, search]);
+  }, [expanded]);
+  const rows = useMemo(
+    () =>
+      controlCandidates("/", catalog, getChoosers(), []).filter((topic) =>
+        topic.name.toLowerCase().includes(search.toLowerCase()),
+      ),
+    [catalog, search],
+  );
   useEffect(() => {
     setScroll(0);
     if (viewport.current) viewport.current.scrollTop = 0;
-  }, [folder, search]);
-  const start = Math.max(0, Math.floor(scroll / 48) - 3),
-    end = Math.min(rows.length, Math.ceil((scroll + height) / 48) + 3);
+  }, [search, expanded]);
+  const start = Math.max(0, Math.floor(scroll / 40) - 3);
+  const end = Math.min(rows.length, Math.ceil((scroll + height) / 40) + 3);
   return (
-    <aside className="browser">
+    <aside
+      className="browser control-picker"
+      aria-label="NetworkTables selectors"
+    >
       <div className="panel-heading">
-        <strong>NetworkTables</strong>
-        <span>{catalog.length} topics</span>
-      </div>
-      <input
-        aria-label="Search topics"
-        placeholder="Search topics…"
-        value={search}
-        onChange={(e) => setSearch(e.target.value)}
-      />
-      <div className="folder-nav">
-        <button
-          disabled={folder === "/"}
-          onClick={() =>
-            setFolder(folder.slice(0, folder.lastIndexOf("/")) || "/")
-          }
-        >
-          ↑
-        </button>
-        <input
-          aria-label="Folder path"
-          value={folder}
-          onChange={(e) =>
-            setFolder(
-              e.target.value.startsWith("/")
-                ? e.target.value
-                : "/" + e.target.value,
-            )
-          }
-        />
-      </div>
-      <button disabled={busy} onClick={() => openAll(folder)}>
-        {busy ? "Adding widgets…" : "Open all entries in folder"}
-      </button>
-      <small className="hint">Click or drag a topic to add a widget.</small>
-      <div
-        ref={viewport}
-        className="topic-list"
-        onScroll={(e) => setScroll(e.currentTarget.scrollTop)}
-      >
-        <div style={{ height: rows.length * 48, position: "relative" }}>
-          {rows.slice(start, end).map((row, i) => (
-            <div
-              key={row.key}
-              style={{
-                position: "absolute",
-                top: (start + i) * 48,
-                height: 48,
-                left: 0,
-                right: 0,
-              }}
+        <h2>
+          <button
+            className="selector-toggle"
+            aria-expanded={expanded}
+            onClick={onToggle}
+          >
+            <span aria-hidden="true">{expanded ? "▾" : "▸"}</span>Add selector
+          </button>
+        </h2>
+        {expanded && (
+          <button
+            className="icon-button"
+            aria-label="Filter selectors"
+            title="Filter selectors"
+            aria-expanded={filterOpen}
+            onClick={() => {
+              setFilterOpen(!filterOpen);
+              setSearch("");
+            }}
+          >
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              aria-hidden="true"
             >
-              {row.topic ? (
-                <TopicRow topic={row.topic} add={add} />
-              ) : (
-                <button
-                  className="folder-row"
-                  onClick={() => setFolder(row.key)}
-                >
-                  ▸ {row.key.split("/").at(-1)}
-                </button>
-              )}
-            </div>
-          ))}
-        </div>
-        {!rows.length && (
-          <p className="hint">No published topics in this folder.</p>
+              <circle cx="10.5" cy="10.5" r="6.5" />
+              <path d="m16 16 5 5" />
+            </svg>
+          </button>
         )}
       </div>
+      {expanded && (
+        <>
+          {filterOpen && (
+            <div className="control-filter">
+              <input
+                autoFocus
+                aria-label="Search selectors"
+                placeholder="Find a selector…"
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+              />
+              <button
+                disabled={busy || !rows.length}
+                onClick={() => openAll("/")}
+                title="Add all published selectors, regardless of the filter"
+              >
+                {busy ? "Adding…" : "Add all"}
+              </button>
+            </div>
+          )}
+          <div
+            ref={viewport}
+            className="topic-list"
+            style={{ height: Math.min(200, Math.max(40, rows.length * 40)) }}
+            onScroll={(event) => setScroll(event.currentTarget.scrollTop)}
+          >
+            <div style={{ height: rows.length * 40, position: "relative" }}>
+              {rows.slice(start, end).map((topic, index) => (
+                <div
+                  key={topic.name}
+                  style={{
+                    position: "absolute",
+                    top: (start + index) * 40,
+                    height: 40,
+                    left: 0,
+                    right: 0,
+                  }}
+                >
+                  <TopicRow
+                    topic={topic}
+                    add={add}
+                    added={widgets.some(
+                      (widget) => widget.topic === topic.name,
+                    )}
+                  />
+                </div>
+              ))}
+            </div>
+            {!rows.length && (
+              <p className="topic-empty">
+                {search
+                  ? "No matching selectors."
+                  : "No selectors published yet."}
+              </p>
+            )}
+          </div>
+        </>
+      )}
     </aside>
   );
 });
@@ -231,13 +382,37 @@ const Card = memo(function Card({
       <header className="widget-handle">
         <strong title={widget.topic}>{widget.title}</strong>
         <div className="widget-actions">
-          <button title="Duplicate" onClick={() => onDuplicate(widget.id)}>
+          <button
+            title="Duplicate"
+            aria-label={`Duplicate ${widget.title}`}
+            onClick={() => onDuplicate(widget.id)}
+          >
             ⧉
           </button>
-          <button title="Settings" onClick={() => onSettings(widget.id)}>
-            ⚙
+          <button
+            title="Settings"
+            aria-label={`Settings for ${widget.title}`}
+            onClick={() => onSettings(widget.id)}
+          >
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 20 20"
+              fill="none"
+              aria-hidden="true"
+            >
+              <path
+                d="M3 5h14M3 15h14M7 2v6m6 4v6"
+                stroke="currentColor"
+                strokeWidth="1.5"
+              />
+            </svg>
           </button>
-          <button title="Remove" onClick={() => onRemove(widget.id)}>
+          <button
+            title="Remove"
+            aria-label={`Remove ${widget.title}`}
+            onClick={() => onRemove(widget.id)}
+          >
             ×
           </button>
         </div>
@@ -338,6 +513,7 @@ function ControllerPanel({
   const [error, setError] = useState(""),
     [capture, setCapture] = useState<string | null>(null);
   const [view, setView] = useState<"front" | "top">("front");
+  useEffect(() => setDraft(profiles[port]), [profiles, port]);
   const captureCleanup = useRef<(() => void) | undefined>(undefined);
   useEffect(() => () => captureCleanup.current?.(), []);
   const save = (next = draft) => {
@@ -450,7 +626,10 @@ function ControllerPanel({
   return (
     <section className="controllers-page">
       <header>
-        <h2>Controllers</h2>
+        <div>
+          <h1>Controllers</h1>
+          <p>Assign devices and tune keyboard bindings for each port.</p>
+        </div>
         <button onClick={onClose}>Workspace</button>
       </header>
       <div className="controller-layout">
@@ -464,24 +643,69 @@ function ControllerPanel({
               <button
                 key={i}
                 className={port === i ? "selected" : ""}
+                aria-pressed={port === i}
                 onClick={() => choosePort(i)}
               >
-                Port {i} · {p.name} · {source}
-                {keyboardPort === i ? " · Keyboard" : ""}
+                <span className="port-name">
+                  <span>Port {i}</span>
+                  <strong>{p.name}</strong>
+                  <PortInputs
+                    profile={p}
+                    port={i}
+                    keyboardPort={keyboardPort}
+                    devices={devices}
+                  />
+                </span>
+                <small>{source}</small>
               </button>
             );
           })}
         </div>
         <div className="controller-editor">
           <div className="port-tabs">
-            <button className="primary" onClick={() => onKeyboardPort(port)}>
-              {keyboardPort === port
-                ? "Keyboard here"
-                : "Use keyboard on this port"}
-            </button>
+            {keyboardPort !== port && (
+              <button onClick={() => onKeyboardPort(port)}>
+                <Icon name="keyboard" />
+                Move keyboard here
+              </button>
+            )}
             <button onClick={() => setView(view === "front" ? "top" : "front")}>
               {view === "front" ? "Top view" : "Front view"}
             </button>
+          </div>
+          <div className="controller-fields">
+            <label>
+              Port name
+              <input
+                value={draft.name}
+                onChange={(e) => setDraft({ ...draft, name: e.target.value })}
+                onBlur={() => save()}
+              />
+            </label>
+            <label>
+              Physical controller
+              <select
+                value={draft.source}
+                onChange={(e) => {
+                  const next = { ...draft, source: e.target.value };
+                  setDraft(next);
+                  save(next);
+                }}
+              >
+                <option value="none">None</option>
+                {draft.source.startsWith("gamepad:") &&
+                  !devices.some((d) => `gamepad:${d.id}` === draft.source) && (
+                    <option value={draft.source}>
+                      Assigned device unavailable
+                    </option>
+                  )}
+                {devices.map((d) => (
+                  <option key={d.id} value={`gamepad:${d.id}`}>
+                    {d.name} · {d.id.slice(-5)}
+                  </option>
+                ))}
+              </select>
+            </label>
           </div>
           <div className="controller-grid">
             <Suspense
@@ -565,38 +789,6 @@ function ControllerPanel({
               ))}
             </div>
           </div>
-          <label>
-            Port name
-            <input
-              value={draft.name}
-              onChange={(e) => setDraft({ ...draft, name: e.target.value })}
-              onBlur={() => save()}
-            />
-          </label>
-          <label>
-            Physical controller
-            <select
-              value={draft.source}
-              onChange={(e) => {
-                const next = { ...draft, source: e.target.value };
-                setDraft(next);
-                save(next);
-              }}
-            >
-              <option value="none">None</option>
-              {draft.source.startsWith("gamepad:") &&
-                !devices.some((d) => `gamepad:${d.id}` === draft.source) && (
-                  <option value={draft.source}>
-                    Assigned device unavailable
-                  </option>
-                )}
-              {devices.map((d) => (
-                <option key={d.id} value={`gamepad:${d.id}`}>
-                  {d.name} · {d.id.slice(-5)}
-                </option>
-              ))}
-            </select>
-          </label>
           <small>
             Preview:{" "}
             {sticks[port]?.axes.map((v) => v.toFixed(2)).join(" · ") ||
@@ -631,8 +823,23 @@ export default function App() {
     [compact, setCompact] = useState(false),
     [editingTab, setEditingTab] = useState<string | null>(null),
     [settingsPage, setSettingsPage] = useState(false),
+    [mobilePanel, setMobilePanel] = useState<
+      "workspace" | "controls" | "topics"
+    >("workspace"),
     [busy, setBusy] = useState(false),
+    [assigningController, setAssigningController] = useState(false),
     [updating, setUpdating] = useState(false);
+  const [narrowCanvas, setNarrowCanvas] = useState(
+    () => window.matchMedia?.("(max-width: 600px)").matches ?? false,
+  );
+  useEffect(() => {
+    const query = window.matchMedia?.("(max-width: 600px)");
+    if (!query) return;
+    const update = () => setNarrowCanvas(query.matches);
+    update();
+    query.addEventListener("change", update);
+    return () => query.removeEventListener("change", update);
+  }, []);
   const compactTransition = useRef(false);
   const autoCompact = useRef(true);
   const compactContent = useRef<HTMLDivElement>(null);
@@ -883,7 +1090,7 @@ export default function App() {
     [],
   );
   const add = useCallback(
-    (name: string, type: string) =>
+    (name: string, type: string) => {
       editWidgets((widgets) => {
         const chooser = getChoosers().has(name.slice(0, name.lastIndexOf("/")))
           ? name.slice(0, name.lastIndexOf("/"))
@@ -893,7 +1100,10 @@ export default function App() {
         const topic = chooser ?? name;
         if (widgets.some((w) => w.topic === topic)) return widgets;
         return [...widgets, createWidget(topic, type, widgets, !!chooser)];
-      }),
+      });
+      setControllers(false);
+      setMobilePanel("workspace");
+    },
     [editWidgets],
   );
   const openAll = useCallback(async (prefix: string) => {
@@ -903,7 +1113,7 @@ export default function App() {
       const tabId = c.workspace.activeTab;
       const widgets = c.workspace.tabs.find((t) => t.id === tabId)!.widgets;
       const catalog = await command<{ topics: TopicDescriptor[] }>("bootstrap");
-      const candidates = folderCandidates(
+      const candidates = controlCandidates(
         prefix,
         catalog.topics,
         getChoosers(),
@@ -936,7 +1146,7 @@ export default function App() {
   }, []);
   const openFolder = useCallback(
     (prefix: string) => {
-      void openAll(prefix);
+      void openAll(prefix).then(() => setMobilePanel("workspace"));
     },
     [openAll],
   );
@@ -1176,6 +1386,23 @@ export default function App() {
       setError(String(e)),
     );
   };
+  const setControllerPort = async (deviceId: string, port: number) => {
+    if (assigningController) return;
+    setAssigningController(true);
+    const profiles = assignController(
+      current.current.workspace.profiles,
+      deviceId,
+      port,
+    );
+    try {
+      await command("set_profiles", { profiles });
+      setWorkspace((old) => ({ ...old, profiles }));
+    } catch (error) {
+      setError(String(error));
+    } finally {
+      setAssigningController(false);
+    }
+  };
   const overlayTopics = workspace.overlay.topics;
   const allWidgets = workspace.tabs.flatMap((t) => t.widgets);
   const compactTopics = overlayTopics
@@ -1332,7 +1559,15 @@ export default function App() {
                       title={`Port ${i}: ${p.name}; controller ${physical}; ${workspace.keyboardPort === i ? "keyboard destination" : ""}`}
                       onClick={() => setKeyboardPort(i)}
                     >
-                      <span>{i}</span>
+                      <span className="compact-port-number">
+                        {i}
+                        <PortInputs
+                          profile={p}
+                          port={i}
+                          keyboardPort={workspace.keyboardPort}
+                          devices={devices}
+                        />
+                      </span>
                       <small>{p.name}</small>
                     </button>
                   );
@@ -1389,27 +1624,55 @@ export default function App() {
       </div>
     );
   return (
-    <div className="app">
+    <div className={`app view-${mobilePanel}`}>
       <header className="topbar">
-        <div className="project-title">
-          <strong>{endpoints.project || "Simulation"}</strong>
-          <small>
-            <span className={connections.control ? "online" : "offline"}>
-              ● Control
-            </span>{" "}
-            ·{" "}
-            <span className={connections.nt ? "online" : "offline"}>
-              ● NetworkTables
-            </span>
-          </small>
+        <div
+          className="studio-brand"
+          title="Simulation Studio"
+          aria-label="Simulation Studio"
+        >
+          <StudioMark />
         </div>
-        <button onClick={() => void toggleCompact()}>Compact</button>
+        <div className="project-title" title={endpoints.project}>
+          <strong>
+            {endpoints.project.split(/[\\/]/).filter(Boolean).at(-1) ||
+              "No project connected"}
+          </strong>
+        </div>
+        <div className="connection-status" aria-label="Connections">
+          <span
+            title={`Control bridge ${connections.control ? "connected" : "offline"}`}
+            aria-label={`Control bridge ${connections.control ? "connected" : "offline"}`}
+            className={connections.control ? "online" : "offline"}
+          >
+            <i />
+            Control
+          </span>
+          <span
+            title={`NetworkTables ${connections.nt ? "connected" : "offline"}`}
+            aria-label={`NetworkTables ${connections.nt ? "connected" : "offline"}`}
+            className={connections.nt ? "online" : "offline"}
+          >
+            <i />
+            NT4
+          </span>
+        </div>
         <button
+          className="icon-button"
+          aria-label="Compact"
+          title="Open compact overlay"
+          onClick={() => void toggleCompact()}
+        >
+          <Icon name="compact" />
+        </button>
+        <button
+          className="icon-button"
           onClick={() => setSettingsPage((open) => !open)}
           aria-pressed={settingsPage}
           aria-label="Studio settings"
+          title={settingsPage ? "Back to workspace" : "Settings"}
         >
-          {settingsPage ? "Workspace" : "Settings"}
+          <Icon name="settings" />
         </button>
       </header>
       {error && (
@@ -1426,74 +1689,15 @@ export default function App() {
       {settingsPage ? (
         <main className="settings-page">
           <header>
-            <h1>Settings</h1>
+            <div>
+              <h1>Settings</h1>
+              <p>Local connections, compact controls, and app updates.</p>
+            </div>
             <button onClick={() => setSettingsPage(false)}>
               Back to workspace
             </button>
           </header>
           <div className="settings-grid">
-            <Updates
-              connected={connections.control || connections.nt}
-              save={saveNow}
-            />
-            <section className="settings-card overlay-settings">
-              <h2>Compact overlay</h2>
-              <p className="hint">
-                Click away to show the pill. Return to Studio through the Dock,
-                window switcher, or expand button. Closing the pill pauses it
-                until you click Compact again. Ports 0 and 1 appear by default.
-              </p>
-              <button onClick={toggleCompact}>Open compact overlay</button>
-              <h3>Controls</h3>
-              <div className="overlay-option-list">
-                {[
-                  ["mode", "Mode selector"],
-                  ["alliance", "Alliance"],
-                  ["estop", "E-stop"],
-                  ["keyboard", "Keyboard ports"],
-                  ["extraPorts", "Include ports 2–5"],
-                ].map(([id, label]) => (
-                  <label key={id}>
-                    <input
-                      type="checkbox"
-                      checked={showOverlayControl(id)}
-                      onChange={(e) => setOverlayControl(id, e.target.checked)}
-                    />
-                    {label}
-                  </label>
-                ))}
-              </div>
-              <strong>Topics</strong>
-              {allWidgets.map((w) => (
-                <label key={w.id}>
-                  <input
-                    type="checkbox"
-                    checked={overlayTopics.includes(w.topic)}
-                    onChange={(e) =>
-                      pickCompactTopic(w.topic, e.target.checked)
-                    }
-                  />
-                  {w.title}
-                </label>
-              ))}
-              {overlayTopics.map((name, i) => (
-                <div className="topic-order" key={name}>
-                  <span>{name}</span>
-                  <button
-                    aria-label={`Move ${name} up`}
-                    onClick={() => moveOverlayTopic(i, -1)}
-                  >
-                    ↑
-                  </button>
-                  <button
-                    aria-label={`Move ${name} down`}
-                    onClick={() => moveOverlayTopic(i, 1)}
-                  >
-                    ↓
-                  </button>
-                </div>
-              ))}
-            </section>
             <ConnectionSettings
               endpoints={endpoints}
               onConnect={async (next) => {
@@ -1516,371 +1720,586 @@ export default function App() {
                 }
               }}
             />
+            <section className="settings-card overlay-settings">
+              <div className="settings-section-intro">
+                <h2>Compact overlay</h2>
+                <p>
+                  Keep robot controls nearby while working in another viewer.
+                </p>
+                <small className="settings-save-note">
+                  Changes save automatically.
+                </small>
+              </div>
+              <div className="settings-panel">
+                <button onClick={toggleCompact}>Open compact overlay</button>
+                <h3>Controls</h3>
+                <div className="overlay-option-list">
+                  {[
+                    ["mode", "Mode selector"],
+                    ["alliance", "Alliance"],
+                    ["estop", "E-stop"],
+                    ["keyboard", "Keyboard ports"],
+                    ["extraPorts", "Include ports 2–5"],
+                  ].map(([id, label]) => (
+                    <label key={id}>
+                      <input
+                        type="checkbox"
+                        checked={showOverlayControl(id)}
+                        onChange={(e) =>
+                          setOverlayControl(id, e.target.checked)
+                        }
+                      />
+                      {label}
+                    </label>
+                  ))}
+                </div>
+                <h3>Topics</h3>
+                {allWidgets.length === 0 && (
+                  <p className="settings-empty">No widget topics.</p>
+                )}
+                {allWidgets.map((w) => (
+                  <label key={w.id}>
+                    <input
+                      type="checkbox"
+                      checked={overlayTopics.includes(w.topic)}
+                      onChange={(e) =>
+                        pickCompactTopic(w.topic, e.target.checked)
+                      }
+                    />
+                    {w.title}
+                  </label>
+                ))}
+                {overlayTopics.map((name, i) => (
+                  <div className="topic-order" key={name}>
+                    <span>{name}</span>
+                    <button
+                      disabled={i === 0}
+                      aria-label={`Move ${name} up`}
+                      onClick={() => moveOverlayTopic(i, -1)}
+                    >
+                      ↑
+                    </button>
+                    <button
+                      disabled={i === overlayTopics.length - 1}
+                      aria-label={`Move ${name} down`}
+                      onClick={() => moveOverlayTopic(i, 1)}
+                    >
+                      ↓
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </section>
+            <Updates
+              connected={connections.control || connections.nt}
+              save={saveNow}
+            />
           </div>
         </main>
       ) : (
-        <div className="main">
-          <aside className="left-column">
-            <section className="robot-controls">
-              <div className="control-row">
-                <button
-                  className="enable large"
-                  aria-pressed={enableSelected}
-                  disabled={!connections.control || applied?.estop || busy}
-                  onClick={() =>
-                    mode === "full" ? void startMatch() : void ds(true)
-                  }
-                >
-                  Enable
-                </button>
-                <button
-                  className="disable large"
-                  aria-pressed={disableSelected}
-                  onClick={() => void ds(false)}
-                >
-                  Disable
-                </button>
-              </div>
-              <div className="control-selectors">
-                <div
-                  className="mode-selector"
-                  role="group"
-                  aria-label="Robot mode"
-                >
-                  <span className="control-label">Mode</span>
-                  <div className="mode-buttons">
-                    {[
-                      ["auto", "Auto"],
-                      ["teleop", "Teleop"],
-                      ["full", "Full Match"],
-                      ["test", "Test"],
-                    ].map(([value, label]) => (
-                      <button
-                        key={value}
-                        className={mode === value ? "selected" : ""}
-                        aria-pressed={mode === value}
-                        onClick={() => {
-                          if (value === "full") {
-                            setMode("full");
-                            void ds(false, false, "auto");
-                          } else {
-                            setMode(value);
-                            void ds(false, false, value);
-                          }
-                        }}
-                      >
+        <div className="workbench">
+          <nav className="mobile-navigation" aria-label="Workbench panels">
+            {(
+              [
+                ["workspace", "Workspace"],
+                ["controls", "Robot controls"],
+                ["topics", "Selectors"],
+              ] as const
+            ).map(([panel, label]) => (
+              <button
+                key={panel}
+                aria-pressed={mobilePanel === panel}
+                onClick={() => setMobilePanel(panel)}
+              >
+                {label}
+              </button>
+            ))}
+          </nav>
+          <div className="main">
+            <aside className="left-column">
+              <section className="robot-controls" aria-label="Driver station">
+                <div className="control-row">
+                  <button
+                    className="enable large"
+                    aria-pressed={enableSelected}
+                    disabled={!connections.control || applied?.estop || busy}
+                    onClick={() =>
+                      mode === "full" ? void startMatch() : void ds(true)
+                    }
+                  >
+                    Enable
+                  </button>
+                  <button
+                    className="disable large"
+                    aria-pressed={disableSelected}
+                    onClick={() => void ds(false)}
+                  >
+                    Disable
+                  </button>
+                </div>
+                {!connections.control && (
+                  <p className="connection-hint">
+                    Connect the control bridge to enable your robot.{" "}
+                    <button onClick={() => setSettingsPage(true)}>
+                      Connection settings
+                    </button>
+                  </p>
+                )}
+                <div className="control-selectors">
+                  <div
+                    className="mode-selector"
+                    role="group"
+                    aria-label="Robot mode"
+                  >
+                    <div className="mode-buttons">
+                      {[
+                        ["auto", "Auto"],
+                        ["teleop", "Teleop"],
+                        ["full", "Full Match"],
+                        ["test", "Test"],
+                      ].map(([value, label]) => (
+                        <button
+                          key={value}
+                          className={mode === value ? "selected" : ""}
+                          aria-pressed={mode === value}
+                          onClick={() => {
+                            if (value === "full") {
+                              setMode("full");
+                              void ds(false, false, "auto");
+                            } else {
+                              setMode(value);
+                              void ds(false, false, value);
+                            }
+                          }}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div
+                    className="alliance-selector"
+                    role="group"
+                    aria-label="Alliance station"
+                  >
+                    <div className="alliance-buttons">
+                      {["Red", "Blue"].map((team) => (
+                        <div className="alliance-team" key={team}>
+                          <span>{team}</span>
+                          <div className="alliance-stations">
+                            {[1, 2, 3].map((station) => {
+                              const value = `${team}${station}`;
+                              return (
+                                <button
+                                  key={value}
+                                  className={
+                                    alliance === value ? "selected" : ""
+                                  }
+                                  aria-label={`${team} station ${station}`}
+                                  aria-pressed={alliance === value}
+                                  title={
+                                    alliance === value
+                                      ? "Click again to clear alliance"
+                                      : `${team} station ${station}`
+                                  }
+                                  onClick={() => {
+                                    const next =
+                                      alliance === value ? "Unknown" : value;
+                                    setAlliance(next);
+                                    void ds(false, false, mode, next);
+                                  }}
+                                >
+                                  {station}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+                <div className="state-time">
+                  <div className="state-time-details">
+                    <strong
+                      className={
+                        applied?.estop
+                          ? "latched"
+                          : applied?.enabled
+                            ? "enabled"
+                            : ""
+                      }
+                    >
+                      {applied?.estop
+                        ? "E-stop latched"
+                        : connections.control && applied?.enabled
+                          ? "Enabled"
+                          : "Disabled"}
+                    </strong>
+                    <span>
+                      {mode === "full"
+                        ? `${matchPhase} · ${Math.floor(elapsed)}s elapsed · ${Math.ceil(matchTime)}s remaining`
+                        : `${Math.floor(elapsed)}s elapsed`}
+                    </span>
+                  </div>
+                  <button
+                    className={applied?.estop ? "estop latched" : "estop"}
+                    title="Emergency stop — latched until simulation restart"
+                    onClick={() => void ds(false, true)}
+                  >
+                    {applied?.estop ? "E-stop latched" : "E-stop"}
+                  </button>
+                </div>
+                {applied?.estop && (
+                  <small className="estop-note">
+                    Latched until simulation restart
+                  </small>
+                )}
+                {mode === "full" && (
+                  <div className="duration-fields">
+                    <strong>Full Match durations (seconds)</strong>
+                    {(
+                      [
+                        ["auto", "Auto"],
+                        ["transition", "Disabled transition"],
+                        ["teleop", "Teleop"],
+                      ] as const
+                    ).map(([key, label]) => (
+                      <label key={key}>
                         {label}
+                        <input
+                          disabled={["Auto", "Transition", "Teleop"].includes(
+                            matchPhase,
+                          )}
+                          type="number"
+                          min="0"
+                          max="3600"
+                          value={workspace.matchDurations[key]}
+                          onChange={(e) =>
+                            setWorkspace((old) => ({
+                              ...old,
+                              matchDurations: {
+                                ...old.matchDurations,
+                                [key]: Number(e.target.value),
+                              },
+                            }))
+                          }
+                        />
+                      </label>
+                    ))}
+                  </div>
+                )}
+                <div className="keyboard-dest">
+                  <strong className="keyboard-port-label">
+                    <InputMark kind="keyboard" label="Keyboard" />
+                    <span>Keyboard port</span>
+                  </strong>
+                  <div>
+                    {workspace.profiles.map((p, i) => (
+                      <button
+                        key={i}
+                        className={
+                          workspace.keyboardPort === i ? "selected" : ""
+                        }
+                        aria-label={`Keyboard port ${i}: ${p.name}`}
+                        aria-pressed={workspace.keyboardPort === i}
+                        title={p.name}
+                        onClick={() => setKeyboardPort(i)}
+                      >
+                        <span>{i}</span>
                       </button>
                     ))}
                   </div>
                 </div>
-                <div
-                  className="alliance-selector"
-                  role="group"
-                  aria-label="Alliance station"
-                >
-                  <span className="control-label">Alliance / station</span>
-                  <div className="alliance-buttons">
-                    <button
-                      className={alliance === "Unknown" ? "selected" : ""}
-                      aria-pressed={alliance === "Unknown"}
-                      onClick={() => {
-                        setAlliance("Unknown");
-                        void ds(false, false, mode, "Unknown");
-                      }}
-                    >
-                      Unknown
-                    </button>
-                    {["Red", "Blue"].map((team) => (
-                      <div className="alliance-team" key={team}>
-                        <span>{team}</span>
-                        <div className="alliance-stations">
-                          {[1, 2, 3].map((station) => {
-                            const value = `${team}${station}`;
-                            return (
-                              <button
-                                key={value}
-                                className={alliance === value ? "selected" : ""}
-                                aria-label={`${team} station ${station}`}
-                                aria-pressed={alliance === value}
-                                onClick={() => {
-                                  setAlliance(value);
-                                  void ds(false, false, mode, value);
-                                }}
-                              >
-                                {station}
-                              </button>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-              <div className="state-time">
-                <div className="state-time-details">
-                  <strong
-                    className={
-                      applied?.estop
-                        ? "latched"
-                        : applied?.enabled
-                          ? "enabled"
-                          : ""
-                    }
+                {devices.map((device, deviceIndex) => (
+                  <div
+                    className="keyboard-dest device-port-row"
+                    role="group"
+                    aria-label={`${device.name} port`}
+                    aria-busy={assigningController}
+                    key={device.id}
                   >
-                    {applied?.estop
-                      ? "E-STOP LATCHED"
-                      : connections.control && applied?.enabled
-                        ? "ENABLED"
-                        : "DISABLED"}
-                  </strong>
-                  <span>
-                    {matchPhase} ·{" "}
-                    {mode === "full"
-                      ? `${Math.floor(elapsed)}s elapsed · ${Math.ceil(matchTime)}s remaining`
-                      : `${Math.floor(elapsed)}s elapsed`}
-                  </span>
-                </div>
-                <button
-                  className={applied?.estop ? "estop latched" : "estop"}
-                  title="Emergency stop — latched until simulation restart"
-                  onClick={() => void ds(false, true)}
-                >
-                  {applied?.estop ? "E-stop latched" : "E-stop"}
-                </button>
-              </div>
-              {applied?.estop && (
-                <small className="estop-note">
-                  Latched until simulation restart
-                </small>
-              )}
-              {mode === "full" && (
-                <div className="duration-fields">
-                  <strong>Full Match durations (seconds)</strong>
-                  {(
-                    [
-                      ["auto", "Auto"],
-                      ["transition", "Disabled transition"],
-                      ["teleop", "Teleop"],
-                    ] as const
-                  ).map(([key, label]) => (
-                    <label key={key}>
-                      {label}
+                    <strong className="device-port-label" title={device.name}>
+                      <InputMark
+                        kind="controller"
+                        label={`Controller ${deviceIndex + 1}: ${device.name}`}
+                        number={
+                          devices.length > 1 ? deviceIndex + 1 : undefined
+                        }
+                      />
+                      <span className="device-name">{device.name}</span>
+                    </strong>
+                    <div>
+                      {workspace.profiles.map((profile, port) => {
+                        const selected =
+                          profile.source === `gamepad:${device.id}`;
+                        const occupied = devices.find(
+                          (other) =>
+                            `gamepad:${other.id}` === profile.source &&
+                            other.id !== device.id,
+                        );
+                        const assigned = workspace.profiles.some(
+                          (profile) =>
+                            profile.source === `gamepad:${device.id}`,
+                        );
+                        return (
+                          <button
+                            key={port}
+                            className={selected ? "selected" : ""}
+                            aria-pressed={selected}
+                            aria-label={`Port ${port}: ${profile.name}`}
+                            disabled={assigningController}
+                            title={`${profile.name}${occupied ? ` · ${assigned ? "Swap with" : "Replace"} ${occupied.name}` : ""}`}
+                            onClick={() =>
+                              void setControllerPort(device.id, port)
+                            }
+                          >
+                            {port}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </section>
+              <Browser
+                add={add}
+                openAll={openFolder}
+                busy={busy}
+                widgets={tab.widgets}
+                expanded={!workspace.topicsCollapsed}
+                onToggle={() =>
+                  setWorkspace((old) => ({
+                    ...old,
+                    topicsCollapsed: !old.topicsCollapsed,
+                  }))
+                }
+              />
+            </aside>
+            <section className="workspace">
+              <nav className="tabs" aria-label="Workspaces">
+                {workspace.tabs.map((t) => (
+                  <div className="tab-item" key={t.id}>
+                    {editingTab === t.id ? (
                       <input
-                        disabled={["Auto", "Transition", "Teleop"].includes(
-                          matchPhase,
-                        )}
-                        type="number"
-                        min="0"
-                        max="3600"
-                        value={workspace.matchDurations[key]}
+                        autoFocus
+                        aria-label="Rename workspace"
+                        value={t.name}
                         onChange={(e) =>
                           setWorkspace((old) => ({
                             ...old,
-                            matchDurations: {
-                              ...old.matchDurations,
-                              [key]: Number(e.target.value),
-                            },
+                            tabs: old.tabs.map((x) =>
+                              x.id === t.id
+                                ? { ...x, name: e.target.value }
+                                : x,
+                            ),
                           }))
                         }
+                        onBlur={() => setEditingTab(null)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") setEditingTab(null);
+                          if (e.key === "Escape") setEditingTab(null);
+                        }}
                       />
-                    </label>
-                  ))}
-                </div>
-              )}
-              <div className="keyboard-dest">
-                <strong>Keyboard port</strong>
-                <div>
-                  {workspace.profiles.map((p, i) => (
-                    <button
-                      key={i}
-                      className={workspace.keyboardPort === i ? "selected" : ""}
-                      title={p.name}
-                      onClick={() => setKeyboardPort(i)}
-                    >
-                      {i}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </section>
-            <button
-              className="topics-toggle"
-              aria-expanded={!workspace.topicsCollapsed}
-              onClick={() =>
-                setWorkspace((old) => ({
-                  ...old,
-                  topicsCollapsed: !old.topicsCollapsed,
-                }))
-              }
-            >
-              Topics {workspace.topicsCollapsed ? "▸" : "▾"}
-            </button>
-            {!workspace.topicsCollapsed && (
-              <Browser add={add} openAll={openFolder} busy={busy} />
-            )}
-          </aside>
-          <section className="workspace">
-            <nav className="tabs">
-              {workspace.tabs.map((t) => (
-                <div className="tab-item" key={t.id}>
-                  {editingTab === t.id ? (
-                    <input
-                      autoFocus
-                      aria-label="Rename workspace"
-                      value={t.name}
-                      onChange={(e) =>
-                        setWorkspace((old) => ({
-                          ...old,
-                          tabs: old.tabs.map((x) =>
-                            x.id === t.id ? { ...x, name: e.target.value } : x,
-                          ),
-                        }))
-                      }
-                      onBlur={() => setEditingTab(null)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") setEditingTab(null);
-                        if (e.key === "Escape") setEditingTab(null);
-                      }}
-                    />
-                  ) : (
-                    <button
-                      className={
-                        !controllers && t.id === tab.id ? "selected" : ""
-                      }
-                      onDoubleClick={() => setEditingTab(t.id)}
-                      onClick={() => {
-                        setControllers(false);
-                        setWorkspace((old) => ({ ...old, activeTab: t.id }));
-                      }}
-                    >
-                      {t.name}
-                    </button>
-                  )}
-                  {workspace.tabs.length > 1 && (
-                    <button
-                      className="tab-close"
-                      aria-label={`Close ${t.name}`}
-                      onClick={() =>
-                        setWorkspace((old) => {
-                          const tabs = old.tabs.filter((x) => x.id !== t.id);
-                          return {
-                            ...old,
-                            tabs,
-                            activeTab:
-                              old.activeTab === t.id
-                                ? tabs[0].id
-                                : old.activeTab,
-                          };
-                        })
-                      }
-                    >
-                      ×
-                    </button>
-                  )}
-                </div>
-              ))}
-              <button
-                onClick={() => {
-                  const id = crypto.randomUUID();
-                  setControllers(false);
-                  setWorkspace((old) => ({
-                    ...old,
-                    activeTab: id,
-                    tabs: [
-                      ...old.tabs,
-                      {
-                        id,
-                        name: `Workspace ${old.tabs.length + 1}`,
-                        widgets: [],
-                      },
-                    ],
-                  }));
-                }}
-              >
-                +
-              </button>
-              <button
-                className={`controllers-tab ${controllers ? "selected" : ""}`}
-                onClick={() => setControllers(true)}
-              >
-                Controllers
-              </button>
-              <span className="tabs-spacer" />
-              <button onClick={exportWorkspace}>Export</button>
-              <button onClick={() => fileInput.current?.click()}>Import</button>
-              <input
-                hidden
-                ref={fileInput}
-                type="file"
-                accept=".json"
-                onChange={(e) => {
-                  if (e.target.files?.[0])
-                    void importWorkspace(e.target.files[0]);
-                  e.target.value = "";
-                }}
-              />
-            </nav>
-            {controllers ? (
-              <ControllerPanel
-                profiles={workspace.profiles}
-                devices={devices}
-                keyboardPort={workspace.keyboardPort}
-                onKeyboardPort={setKeyboardPort}
-                onClose={() => setControllers(false)}
-                onChange={(profiles) =>
-                  setWorkspace((old) => ({ ...old, profiles }))
-                }
-              />
-            ) : (
-              <div
-                className="grid-scroll"
-                onDragOver={(e) => e.preventDefault()}
-                onDrop={(e) => {
-                  try {
-                    const topic = JSON.parse(
-                      e.dataTransfer.getData("application/x-nt-topic"),
-                    ) as TopicDescriptor;
-                    add(topic.name, topic.type);
-                  } catch {
-                    /* Ignore unsupported drops. */
-                  }
-                }}
-              >
-                <Grid
-                  key={tab.id}
-                  layout={layout}
-                  cols={12}
-                  rowHeight={38}
-                  margin={[12, 12]}
-                  draggableHandle=".widget-handle"
-                  draggableCancel="button,input,select"
-                  onDragStop={updateLayout}
-                  onResizeStop={updateLayout}
-                  compactType="vertical"
-                >
-                  {tab.widgets.map((w) => (
-                    <div key={w.id}>
-                      <Card
-                        widget={w}
-                        connected={connections.nt}
-                        onSettings={showSettings}
-                        onRemove={remove}
-                        onDuplicate={duplicate}
-                      />
-                    </div>
-                  ))}
-                </Grid>
-                {!tab.widgets.length && (
-                  <div className="empty">
-                    <h2>Workspace</h2>
-                    <p>Add a NetworkTables topic from the Topics panel.</p>
+                    ) : (
+                      <button
+                        className={
+                          !controllers && t.id === tab.id ? "selected" : ""
+                        }
+                        aria-pressed={!controllers && t.id === tab.id}
+                        onDoubleClick={() => setEditingTab(t.id)}
+                        onClick={() => {
+                          setControllers(false);
+                          setWorkspace((old) => ({ ...old, activeTab: t.id }));
+                        }}
+                      >
+                        {t.name}
+                      </button>
+                    )}
+                    {workspace.tabs.length > 1 && (
+                      <button
+                        className="tab-close"
+                        aria-label={`Close ${t.name}`}
+                        onClick={() =>
+                          setWorkspace((old) => {
+                            const tabs = old.tabs.filter((x) => x.id !== t.id);
+                            return {
+                              ...old,
+                              tabs,
+                              activeTab:
+                                old.activeTab === t.id
+                                  ? tabs[0].id
+                                  : old.activeTab,
+                            };
+                          })
+                        }
+                      >
+                        ×
+                      </button>
+                    )}
                   </div>
-                )}
-              </div>
-            )}
-          </section>
+                ))}
+                <button
+                  aria-label="Add workspace"
+                  title="Add workspace"
+                  onClick={() => {
+                    const id = crypto.randomUUID();
+                    setControllers(false);
+                    setWorkspace((old) => ({
+                      ...old,
+                      activeTab: id,
+                      tabs: [
+                        ...old.tabs,
+                        {
+                          id,
+                          name: `Workspace ${old.tabs.length + 1}`,
+                          widgets: [],
+                        },
+                      ],
+                    }));
+                  }}
+                >
+                  +
+                </button>
+                <button
+                  className={`controllers-tab ${controllers ? "selected" : ""}`}
+                  aria-pressed={controllers}
+                  onClick={() => setControllers(true)}
+                >
+                  Controllers
+                </button>
+                <span className="tabs-spacer" />
+                <button
+                  className="icon-button"
+                  aria-label="Export"
+                  title="Export workspace"
+                  onClick={exportWorkspace}
+                >
+                  <Icon name="export" />
+                </button>
+                <button
+                  className="icon-button"
+                  aria-label="Import"
+                  title="Import workspace"
+                  onClick={() => fileInput.current?.click()}
+                >
+                  <Icon name="import" />
+                </button>
+                <input
+                  hidden
+                  ref={fileInput}
+                  type="file"
+                  accept=".json"
+                  onChange={(e) => {
+                    if (e.target.files?.[0])
+                      void importWorkspace(e.target.files[0]);
+                    e.target.value = "";
+                  }}
+                />
+              </nav>
+              {controllers ? (
+                <ControllerPanel
+                  profiles={workspace.profiles}
+                  devices={devices}
+                  keyboardPort={workspace.keyboardPort}
+                  onKeyboardPort={setKeyboardPort}
+                  onClose={() => setControllers(false)}
+                  onChange={(profiles) =>
+                    setWorkspace((old) => ({ ...old, profiles }))
+                  }
+                />
+              ) : (
+                <>
+                  <h1 className="sr-only">{tab.name}</h1>
+                  <div
+                    className="grid-scroll"
+                    onDragOver={(e) => e.preventDefault()}
+                    onDrop={(e) => {
+                      try {
+                        const topic = JSON.parse(
+                          e.dataTransfer.getData("application/x-nt-topic"),
+                        ) as TopicDescriptor;
+                        add(topic.name, topic.type);
+                      } catch {
+                        /* Ignore unsupported drops. */
+                      }
+                    }}
+                  >
+                    <Grid
+                      key={tab.id}
+                      layout={layout}
+                      cols={12}
+                      rowHeight={38}
+                      margin={[12, 12]}
+                      draggableHandle=".widget-handle"
+                      draggableCancel="button,input,select"
+                      onDragStop={updateLayout}
+                      onResizeStop={updateLayout}
+                      compactType="vertical"
+                      isDraggable={!narrowCanvas}
+                      isResizable={!narrowCanvas}
+                    >
+                      {tab.widgets.map((w) => (
+                        <div key={w.id}>
+                          <Card
+                            widget={w}
+                            connected={connections.nt}
+                            onSettings={showSettings}
+                            onRemove={remove}
+                            onDuplicate={duplicate}
+                          />
+                        </div>
+                      ))}
+                    </Grid>
+                    {!tab.widgets.length && (
+                      <div className="empty">
+                        <h2>
+                          {connections.nt
+                            ? "No widgets yet"
+                            : "Simulation disconnected"}
+                        </h2>
+                        <p>
+                          {connections.nt
+                            ? "Click or drag a topic from NetworkTables to add a widget."
+                            : "Start your robot simulation and connect its local services."}
+                        </p>
+                        <div className="empty-actions">
+                          <button
+                            className="primary"
+                            onClick={() => {
+                              if (!connections.nt) {
+                                setSettingsPage(true);
+                                return;
+                              }
+                              setMobilePanel("topics");
+                              setWorkspace((old) => ({
+                                ...old,
+                                topicsCollapsed: false,
+                              }));
+                              requestAnimationFrame(() =>
+                                document
+                                  .querySelector<HTMLInputElement>(
+                                    '[aria-label="Filter selectors"]',
+                                  )
+                                  ?.focus(),
+                              );
+                            }}
+                          >
+                            {connections.nt
+                              ? "Browse selectors"
+                              : "Connection settings"}
+                          </button>
+                          <button onClick={() => setControllers(true)}>
+                            Set up controllers
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </>
+              )}
+            </section>
+          </div>
         </div>
       )}
       {selected && !settingsPage && (
@@ -1909,33 +2328,49 @@ function ConnectionSettings({
   const [connecting, setConnecting] = useState(false);
   useEffect(() => setDraft(endpoints), [endpoints]);
   return (
-    <section className="settings-card">
-      <h2>Simulation connection</h2>
-      {(["project", "control", "nt"] as const).map((key) => (
-        <label key={key}>
-          {key}
-          <input
-            value={draft[key]}
-            onChange={(e) => setDraft({ ...draft, [key]: e.target.value })}
-          />
-        </label>
-      ))}
-      <small>Only local simulation endpoints are supported.</small>
-      <div className="dialog-actions">
-        <button
-          disabled={connecting}
-          onClick={async () => {
-            setConnecting(true);
-            try {
-              await onConnect(draft);
-            } finally {
-              setConnecting(false);
-            }
-          }}
-        >
-          {connecting ? "Connecting…" : "Connect"}
-        </button>
+    <section className="settings-card connection-settings">
+      <div className="settings-section-intro">
+        <h2>Simulation connection</h2>
+        <p>
+          Connect to the services running alongside your robot code on this
+          computer.
+        </p>
       </div>
+      <form
+        className="settings-panel"
+        onSubmit={async (event) => {
+          event.preventDefault();
+          if (connecting) return;
+          setConnecting(true);
+          try {
+            await onConnect(draft);
+          } finally {
+            setConnecting(false);
+          }
+        }}
+      >
+        {(["project", "control", "nt"] as const).map((key) => (
+          <label key={key}>
+            {
+              {
+                project: "Project folder",
+                control: "Robot control endpoint",
+                nt: "NetworkTables endpoint",
+              }[key]
+            }
+            <input
+              spellCheck={false}
+              value={draft[key]}
+              onChange={(e) => setDraft({ ...draft, [key]: e.target.value })}
+            />
+          </label>
+        ))}
+        <div className="dialog-actions">
+          <button type="submit" disabled={connecting}>
+            {connecting ? "Connecting…" : "Connect"}
+          </button>
+        </div>
+      </form>
     </section>
   );
 }

@@ -260,12 +260,31 @@ function BuiltinWidget({ widget: w, connected, compact }: WidgetProps) {
           )}
         </form>
       )}
-      {["readout", "details"].includes(w.kind) && (
-        <pre>
-          {typeof data === "string"
-            ? data
-            : JSON.stringify(data ?? null, null, compact ? undefined : 2)}
-        </pre>
+      {w.kind === "readout" && !compact && data === undefined ? (
+        <span className="hint">Waiting for value</span>
+      ) : w.kind === "readout" &&
+        !compact &&
+        data !== null &&
+        data !== undefined &&
+        !Array.isArray(data) ? (
+        <output
+          className={
+            typeof data === "string"
+              ? "readout-value readout-text"
+              : "readout-value"
+          }
+          aria-label={w.title}
+        >
+          {String(data)}
+        </output>
+      ) : (
+        ["readout", "details"].includes(w.kind) && (
+          <pre>
+            {typeof data === "string"
+              ? data
+              : JSON.stringify(data ?? null, null, compact ? undefined : 2)}
+          </pre>
+        )
       )}
       {value?.value.truncated && (
         <>

@@ -2,8 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 
-const background = 0x172131;
-const ink = 0x8da8bc;
+const background = 0x1c1c1c;
+const ink = 0xababab;
 type Part = {
   shape: THREE.Shape;
   id?: string;
@@ -229,7 +229,7 @@ export default function Controller3D({ active, view, onSelect }: Props) {
         const labelCanvas = document.createElement("canvas");
         labelCanvas.width = labelCanvas.height = 128;
         const ctx = labelCanvas.getContext("2d")!;
-        ctx.fillStyle = "#b6cbd9";
+        ctx.fillStyle = "#c4c4c4";
         ctx.font = "500 72px system-ui";
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
@@ -399,8 +399,8 @@ export default function Controller3D({ active, view, onSelect }: Props) {
         >
           <path
             d={svgPath(part.shape)}
-            fill="#172131"
-            stroke={part.outline === false ? "none" : "#8da8bc"}
+            fill="#1c1c1c"
+            stroke={part.outline === false ? "none" : "#ababab"}
             strokeWidth="0.018"
           />
           {part.label && (
@@ -413,7 +413,7 @@ export default function Controller3D({ active, view, onSelect }: Props) {
       <path
         d={svgPath(cross)}
         fill="none"
-        stroke="#8da8bc"
+        stroke="#ababab"
         strokeWidth="0.018"
         pointerEvents="none"
       />

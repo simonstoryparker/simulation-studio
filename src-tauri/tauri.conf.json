@@ -6,10 +6,10 @@
     "windows": [
       {
         "minHeight": 600,
-        "width": 1280,
+        "width": 960,
         "minWidth": 900,
         "title": "Simulation Studio",
-        "height": 820,
+        "height": 640,
         "transparent": true,
         "acceptFirstMouse": true
       }
@@ -24,7 +24,7 @@
     "beforeBuildCommand": "npm run build",
     "frontendDist": "../dist"
   },
-  "version": "0.1.2",
+  "version": "0.1.3",
   "bundle": {
     "active": true,
     "targets": ["app"],
