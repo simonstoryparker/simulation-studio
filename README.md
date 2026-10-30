@@ -1,8 +1,12 @@
 # Simulation Studio
 
-Simulation Studio is a desktop app for local FRC robot simulation. It’s an attempt to make the WPILib simulation experience a little easier to use, with robot controls, keyboard and gamepad input, and NetworkTables widgets in one window.
+Simulation Studio is a desktop app for local FRC robot simulation. It’s an attempt to make the WPILib simulation experience a little easier to use, with robot controls, keyboard and gamepad input, and NetworkTables widgets in one window. WPILib’s simulation UI is outdated, makes button bindings and controls difficult to configure, and doesn’t handle controllers properly on macOS.
 
 A compact overlay keeps controls nearby while you use another viewer, such as AdvantageScope. The app is built with Tauri, React, and Rust.
+
+<img width="1072" height="752" alt="Simulation Studio Preview" src="https://github.com/user-attachments/assets/ef52199d-a939-474d-9d4b-1bb0cb657632" />
+<img width="587" height="103" alt="Compact" src="https://github.com/user-attachments/assets/b28cb44f-acb9-472a-a611-353c356b01ca" />
+
 
 ## Install
 
