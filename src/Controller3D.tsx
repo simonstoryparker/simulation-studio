@@ -1,6 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+import { ControllerOutline } from "./controllerOutline";
+import { invoke } from "@tauri-apps/api/core";
 
 const background = 0x1c1c1c;
 const ink = 0xababab;
@@ -149,6 +152,179 @@ const cross = polygon(
     [-0.14, 0.14],
   ].map(([x, y]) => [x + dx, y + dy]),
 );
+function matchControlBinding(
+  name: string,
+): { id: string; name: string } | null {
+  const n = name.toLowerCase();
+  if (/^(a|a_top|a_base)$|\b(button_a|btn_a|south)\b/.test(n))
+    return { id: "South", name: "A" };
+  if (/^(b|b_top|b_base)$|\b(button_b|btn_b|east)\b/.test(n))
+    return { id: "East", name: "B" };
+  if (/^(x|x_top|xbase)$|\b(button_x|btn_x|west)\b/.test(n))
+    return { id: "West", name: "X" };
+  if (/^(y|y_top|y_base)$|\b(button_y|btn_y|north)\b/.test(n))
+    return { id: "North", name: "Y" };
+  if (n === "left_1" || /trigger.*l|\blt\b|l_trigger|left.*trigger/.test(n))
+    return { id: "LeftZ:positive", name: "Left trigger" };
+  if (n === "right_1" || /trigger.*r|\brt\b|r_trigger|right.*trigger/.test(n))
+    return { id: "RightZ:positive", name: "Right trigger" };
+  if (n === "left_2" || /bumper.*l|\blb\b|l_bumper|left.*bumper/.test(n))
+    return { id: "LeftTrigger", name: "Left bumper" };
+  if (n === "right_2" || /bumper.*r|\brb\b|r_bumper|right.*bumper/.test(n))
+    return { id: "RightTrigger", name: "Right bumper" };
+  if (n === "share" || /view|back|select/.test(n))
+    return { id: "Select", name: "View" };
+  if (n === "home" || /menu|start/.test(n))
+    return { id: "Start", name: "Menu" };
+  if (
+    n.startsWith("mesh_14") ||
+    /stick.*l|thumb.*l|left.*stick|left.*thumb/.test(n)
+  )
+    return { id: "LeftThumb", name: "Left stick click" };
+  if (
+    n.startsWith("mesh_15") ||
+    /stick.*r|thumb.*r|right.*stick|right.*thumb/.test(n)
+  )
+    return { id: "RightThumb", name: "Right stick click" };
+  if (n === "dpad" || n.includes("dpad"))
+    return { id: "DPad:0", name: "D-pad" };
+
+  return null;
+}
+function applyLineArtStyle(
+  model: THREE.Object3D,
+  hits: THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>[],
+  surfaces: THREE.Object3D[],
+) {
+  // These three nested assemblies were exported in their source coordinates,
+  // unlike the baked casing. Seat them in the casing's circular openings.
+  for (const [name, x, y, z] of [
+    ["Left", -1.35575, 0.6739, 0.4313],
+    ["Right", 0.6771, -0.1036, 0.4325],
+    ["Xbox_button", 0.004, 1.20695, 0.60565],
+  ] as const) {
+    const assembly = model.getObjectByName(name);
+    if (!assembly) continue;
+    const bounds = new THREE.Box3().setFromObject(assembly);
+    const center = bounds.getCenter(new THREE.Vector3());
+    // Already assembled models must keep their original transforms.
+    if (bounds.getSize(new THREE.Vector3()).x > 0.6 || bounds.max.y > 0.5)
+      continue;
+    const scale = 2.7;
+    assembly.rotation.x = Math.PI / 2;
+    assembly.scale.setScalar(scale);
+    assembly.position.set(
+      x - center.x * scale,
+      y + center.z * scale,
+      z - bounds.min.y * scale,
+    );
+  }
+  model.updateMatrixWorld(true);
+  const box = new THREE.Box3().setFromObject(model);
+  const size = box.getSize(new THREE.Vector3());
+  const center = box.getCenter(new THREE.Vector3());
+  const maxDim = Math.max(size.x, size.y, size.z);
+  if (maxDim > 0) {
+    const targetScale = 5.2 / maxDim;
+    model.scale.multiplyScalar(targetScale);
+    model.position
+      .multiplyScalar(targetScale)
+      .sub(center.multiplyScalar(targetScale));
+    model.updateMatrixWorld(true);
+  }
+
+  const meshes: THREE.Mesh[] = [];
+  const sourceMaterials = new Set<THREE.Material>();
+  model.traverse((child) => {
+    if (child instanceof THREE.Mesh && child.geometry) {
+      meshes.push(child);
+      (Array.isArray(child.material)
+        ? child.material
+        : [child.material]
+      ).forEach((material) => sourceMaterials.add(material));
+    }
+  });
+
+  for (const child of meshes) {
+    const mesh = child as THREE.Mesh<
+      THREE.BufferGeometry,
+      THREE.MeshBasicMaterial
+    >;
+    const lowerName = mesh.name.toLowerCase();
+    const isLogo =
+      lowerName.includes("logo") ||
+      lowerName.includes("mark") ||
+      /^(a|b|x|y)$/.test(lowerName) ||
+      lowerName === "mesh_13";
+    const isButtonCap = /^(a|b|x|y)_top$/.test(lowerName);
+    const isDecal =
+      isLogo ||
+      lowerName.startsWith("cap_") ||
+      lowerName === "ending" ||
+      lowerName.startsWith("port_internal");
+
+    if (isLogo) {
+      mesh.material = new THREE.MeshBasicMaterial({
+        color: ink,
+        side: THREE.DoubleSide,
+        transparent: true,
+        opacity: 0.9,
+      });
+      mesh.userData.outline = false;
+      mesh.raycast = () => {};
+      continue;
+    }
+
+    mesh.material = new THREE.MeshBasicMaterial({
+      color: background,
+      side: THREE.DoubleSide,
+      polygonOffset: true,
+      polygonOffsetFactor: 2,
+      polygonOffsetUnits: 2,
+      // The letters sit inside clear button caps in the source model.
+      transparent: isButtonCap,
+      opacity: isButtonCap ? 0 : 1,
+      depthWrite: !isButtonCap,
+    });
+    mesh.userData.outline = !isDecal;
+
+    if (!isDecal) {
+      surfaces.push(mesh);
+    } else {
+      mesh.raycast = () => {};
+    }
+
+    const binding = matchControlBinding(mesh.name);
+
+    if (binding) {
+      mesh.userData.binding = binding.id;
+      mesh.userData.name = binding.name;
+      hits.push(mesh);
+    }
+  }
+  sourceMaterials.forEach(disposeMaterial);
+}
+function disposeMaterial(material: THREE.Material) {
+  for (const value of Object.values(material)) {
+    if (value instanceof THREE.Texture) value.dispose();
+  }
+  material.dispose();
+}
+function disposeObject(root: THREE.Object3D) {
+  const geometries = new Set<THREE.BufferGeometry>();
+  const materials = new Set<THREE.Material>();
+  root.traverse((object) => {
+    if (object instanceof THREE.Mesh || object instanceof THREE.Line) {
+      geometries.add(object.geometry);
+      (Array.isArray(object.material)
+        ? object.material
+        : [object.material]
+      ).forEach((material) => materials.add(material));
+    }
+  });
+  geometries.forEach((geometry) => geometry.dispose());
+  materials.forEach(disposeMaterial);
+}
 type Props = {
   active: string | null;
   view: "front" | "top";
@@ -163,6 +339,7 @@ export default function Controller3D({ active, view, onSelect }: Props) {
   const [fallback, setFallback] = useState(false);
   useEffect(() => {
     if (!host.current) return;
+    let disposed = false;
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(background);
     const camera = new THREE.PerspectiveCamera(34, 1, 0.1, 100);
@@ -180,16 +357,22 @@ export default function Controller3D({ active, view, onSelect }: Props) {
     controls.enablePan = false;
     controls.minDistance = 7;
     controls.maxDistance = 20;
-    const draw = () => renderer.render(scene, camera);
+    let modelOutline: ControllerOutline | undefined;
+    const draw = () =>
+      modelOutline
+        ? modelOutline.render(renderer, scene, camera)
+        : renderer.render(scene, camera);
     controls.addEventListener("change", draw);
     const hits: THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>[] =
       [];
     const surfaces: THREE.Object3D[] = [];
+    const proceduralGroup = new THREE.Group();
+    scene.add(proceduralGroup);
     const outline = (shape: THREE.Shape, z: number) => {
       const geometry = new THREE.BufferGeometry().setFromPoints(
         shape.getPoints(48).map((p) => new THREE.Vector3(p.x, p.y, z)),
       );
-      scene.add(
+      proceduralGroup.add(
         new THREE.LineLoop(
           geometry,
           new THREE.LineBasicMaterial({ color: ink }),
@@ -218,7 +401,7 @@ export default function Controller3D({ active, view, onSelect }: Props) {
       mesh.position.z = z;
       mesh.userData.binding = part.id;
       mesh.userData.name = part.name;
-      scene.add(mesh);
+      proceduralGroup.add(mesh);
       surfaces.push(mesh);
       if (part.id) hits.push(mesh);
       if (part.outline !== false) {
@@ -244,22 +427,91 @@ export default function Controller3D({ active, view, onSelect }: Props) {
           }),
         );
         label.position.set(part.x!, part.y!, 0.16);
-        scene.add(label);
+        proceduralGroup.add(label);
       }
     }
     outline(cross, 0.15);
+    const proceduralHits = [...hits];
+    const proceduralSurfaces = [...surfaces];
+    const loader = new GLTFLoader();
+    const tryLoad = (url: string, next?: () => void) => {
+      loader.load(
+        url,
+        (gltf) => {
+          if (disposed) {
+            disposeObject(gltf.scene);
+            return;
+          }
+          try {
+            const nextHits: THREE.Mesh<
+              THREE.BufferGeometry,
+              THREE.MeshBasicMaterial
+            >[] = [];
+            const nextSurfaces: THREE.Object3D[] = [];
+            applyLineArtStyle(gltf.scene, nextHits, nextSurfaces);
+            modelOutline = new ControllerOutline(gltf.scene);
+            scene.remove(proceduralGroup);
+            hits.length = 0;
+            hits.push(...nextHits);
+            surfaces.length = 0;
+            surfaces.push(...nextSurfaces);
+            scene.add(gltf.scene);
+            if (host.current) {
+              modelOutline.setSize(
+                host.current.clientWidth,
+                host.current.clientHeight,
+                renderer.getPixelRatio(),
+              );
+            }
+            highlight();
+            disposeObject(proceduralGroup);
+          } catch (e: any) {
+            modelOutline?.dispose();
+            modelOutline = undefined;
+            scene.remove(gltf.scene);
+            disposeObject(gltf.scene);
+            scene.add(proceduralGroup);
+            hits.splice(0, hits.length, ...proceduralHits);
+            surfaces.splice(0, surfaces.length, ...proceduralSurfaces);
+            draw();
+            void invoke("report_frontend_error", {
+              message: `Failed to apply line art style: ${e?.stack || e?.message || String(e)}`,
+            });
+            console.error("Failed to apply line art style:", e);
+          }
+        },
+        undefined,
+        (err: any) => {
+          if (disposed) return;
+          if (next) {
+            next();
+          } else {
+            void invoke("report_frontend_error", {
+              message: `GLTFLoader error for ${url}: ${err?.message || String(err)}`,
+            });
+          }
+        },
+      );
+    };
+    tryLoad("/models/controller.glb", () => {
+      tryLoad("/models/controller.gltf");
+    });
     let selected: string | null = null,
       hovered: string | null = null;
     const highlight = () => {
-      hits.forEach((mesh) =>
+      hits.forEach((mesh) => {
+        const isDpad = mesh.name === "Dpad";
+        const isSelected = isDpad
+          ? selected?.startsWith("DPad:")
+          : mesh.userData.binding === selected;
+        const isHovered = isDpad
+          ? hovered?.startsWith("DPad:")
+          : mesh.userData.binding === hovered;
+
         mesh.material.color.setHex(
-          mesh.userData.binding === selected
-            ? 0x895728
-            : mesh.userData.binding === hovered
-              ? 0x674326
-              : background,
-        ),
-      );
+          isSelected ? 0x895728 : isHovered ? 0x674326 : background,
+        );
+      });
       draw();
     };
     updateRef.current = (value) => {
@@ -290,6 +542,7 @@ export default function Controller3D({ active, view, onSelect }: Props) {
       if (!host.current) return;
       const { clientWidth: width, clientHeight: height } = host.current;
       renderer.setSize(width, height, false);
+      modelOutline?.setSize(width, height, renderer.getPixelRatio());
       camera.aspect = width / Math.max(height, 1);
       camera.updateProjectionMatrix();
       positionCamera();
@@ -306,25 +559,68 @@ export default function Controller3D({ active, view, onSelect }: Props) {
         (-(event.clientY - rect.top) / rect.height) * 2 + 1,
       );
       ray.setFromCamera(point, camera);
-      // The opaque shell also participates, preventing picks through the body.
-      return ray.intersectObjects(surfaces)[0]?.object;
+      const intersects = ray.intersectObjects(surfaces, false);
+      for (const hit of intersects) {
+        let binding = hit.object.userData.binding;
+        let name = hit.object.userData.name;
+        if (hit.object.name.toLowerCase() === "dpad") {
+          const mesh = hit.object as THREE.Mesh;
+          if (!mesh.geometry.boundingBox) mesh.geometry.computeBoundingBox();
+          const center = mesh.geometry.boundingBox!.getCenter(
+            new THREE.Vector3(),
+          );
+          const localPoint = mesh.worldToLocal(hit.point.clone());
+          const dx = localPoint.x - center.x;
+          const dy = localPoint.y - center.y;
+          if (Math.abs(dx) > Math.abs(dy)) {
+            if (dx > 0) {
+              binding = "DPad:1";
+              name = "D-pad right";
+            } else {
+              binding = "DPad:3";
+              name = "D-pad left";
+            }
+          } else {
+            if (dy > 0) {
+              binding = "DPad:0";
+              name = "D-pad up";
+            } else {
+              binding = "DPad:2";
+              name = "D-pad down";
+            }
+          }
+        }
+        if (binding) {
+          return { object: hit.object, binding, name };
+        }
+        if (
+          hit.object.name === "Front_panel" ||
+          hit.object.name === "Rear_panel" ||
+          !hit.object.userData.binding
+        ) {
+          return null;
+        }
+      }
+      return null;
     };
     let down: { x: number; y: number } | null = null;
     const move = (event: PointerEvent) => {
-      const object = event.buttons ? undefined : pick(event);
-      hovered = object?.userData.binding ?? null;
+      const picked = event.buttons ? null : pick(event);
+      const previousHover = hovered;
+      hovered = picked?.binding ?? null;
       canvas.style.cursor = event.buttons
         ? "grabbing"
         : hovered
           ? "pointer"
           : "grab";
-      canvas.title = object?.userData.name ?? "Drag to rotate";
-      highlight();
+      canvas.title = picked?.name ?? "Drag to rotate";
+      if (hovered !== previousHover) highlight();
     };
     const leave = () => {
+      const previousHover = hovered;
       hovered = null;
       down = null;
-      highlight();
+      if (previousHover !== null) highlight();
     };
     const press = (event: PointerEvent) => {
       down = { x: event.clientX, y: event.clientY };
@@ -334,8 +630,8 @@ export default function Controller3D({ active, view, onSelect }: Props) {
         down &&
         Math.hypot(event.clientX - down.x, event.clientY - down.y) <= 5
       ) {
-        const id = pick(event)?.userData.binding;
-        if (id) selectRef.current(id);
+        const picked = pick(event);
+        if (picked?.binding) selectRef.current(picked.binding);
       }
       down = null;
       move(event);
@@ -345,25 +641,15 @@ export default function Controller3D({ active, view, onSelect }: Props) {
     canvas.addEventListener("pointerdown", press);
     canvas.addEventListener("pointerup", release);
     return () => {
+      disposed = true;
       observer.disconnect();
       controls.dispose();
+      modelOutline?.dispose();
       canvas.removeEventListener("pointermove", move);
       canvas.removeEventListener("pointerleave", leave);
       canvas.removeEventListener("pointerdown", press);
       canvas.removeEventListener("pointerup", release);
-      scene.traverse((object) => {
-        if (object instanceof THREE.Mesh || object instanceof THREE.Line) {
-          object.geometry.dispose();
-          const materials = Array.isArray(object.material)
-            ? object.material
-            : [object.material];
-          materials.forEach((material) => {
-            if ("map" in material && material.map instanceof THREE.Texture)
-              material.map.dispose();
-            material.dispose();
-          });
-        }
-      });
+      disposeObject(scene);
       renderer.dispose();
       canvas.remove();
       updateRef.current = () => {};

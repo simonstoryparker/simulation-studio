@@ -6,4 +6,4 @@ The frontend uses React, React DOM, react-grid-layout/react-resizable, Three.js,
 
 `scripts/generate-notices.mjs` collects each installed npm package's and resolved Rust crate's license metadata and included LICENSE/COPYING/NOTICE files. Local packaging and release builds generate `src-tauri/resources/THIRD_PARTY_NOTICES.txt` and bundle it with the app. This includes development/build dependencies as well as runtime dependencies so their notices are retained conservatively. Regenerate it after dependency updates; never hand-edit generated notices.
 
-The controller drawing is procedural application code; no robot CAD/models or external controller artwork is included.
+The controller tab supports rendering external 3D controller assets, such as "White XBOX Controller" by CREATRBOI (Sketchfab, CC BY 4.0: https://creativecommons.org/licenses/by/4.0/). When no external model is provided, the controller drawing falls back to procedural application geometry.
