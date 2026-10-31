@@ -1,12 +1,15 @@
 use std::collections::{HashMap, HashSet};
+#[cfg(target_os = "macos")]
 use std::sync::{Arc, Mutex};
 
 pub const DEVICE_ID: &str = "padkit:powera";
 pub const DEVICE_NAME: &str = "PowerA Controller (Padkit)";
+#[allow(dead_code)]
 pub const PADKIT_MAGIC: u32 = 0x31415750;
 
 pub type DeviceInputs = (HashMap<String, f64>, HashSet<String>);
 
+#[allow(dead_code)]
 pub fn normalize_axis(value: i16) -> f64 {
     if value < 0 {
         value as f64 / 32768.0
@@ -15,6 +18,7 @@ pub fn normalize_axis(value: i16) -> f64 {
     }
 }
 
+#[allow(dead_code)]
 pub fn parse_frame(buf: &[u8; 32]) -> Option<Option<DeviceInputs>> {
     let magic = u32::from_le_bytes(buf[0..4].try_into().unwrap());
     let version = u32::from_le_bytes(buf[4..8].try_into().unwrap());
