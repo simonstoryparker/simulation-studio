@@ -25,4 +25,4 @@ Keep protocol version 1 compatible across app releases. A future breaking protoc
 
 ## Tests
 
-`tests/protocol/control-v1.json` is mirrored in the robot repo at `shared/src/test/resources/simulation/control-v1.json`. Both repositories test the same control vectors independently. Update both copies together when extending the contract. The app also tests acknowledgement vectors and a loopback WebSocket fixture; the robot tests real HAL application and watchdog behavior.
+`tests/protocol/control-v1.json` is mirrored in the robot repo at `shared/src/test/resources/simulation-studio/control-v1.json`. Both repositories test the same control vectors independently. Update both copies together when extending the contract. The app also tests acknowledgement vectors and a loopback WebSocket fixture; the robot tests real HAL application and watchdog behavior.

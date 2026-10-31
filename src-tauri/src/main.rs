@@ -3,6 +3,7 @@ mod control;
 mod lifecycle;
 mod model;
 mod nt;
+mod padkit;
 mod protocol;
 mod updates;
 use lifecycle::{Lifecycle, Service};

@@ -1,4 +1,4 @@
-use crate::{protocol, AppState, Service};
+use crate::{padkit, protocol, AppState, Service};
 use futures_util::{SinkExt, StreamExt};
 use serde_json::json;
 use std::{
@@ -12,6 +12,7 @@ use tokio_tungstenite::{connect_async, tungstenite::Message};
 pub fn start_input(state: Arc<AppState>) {
     std::thread::Builder::new().name("native-input".into()).spawn(move || {
         let mut gilrs = match gilrs::Gilrs::new() {Ok(g)=>g, Err(e)=>{state.error("input",&e.to_string());return;}};
+        let padkit_client = padkit::PadkitClient::new();
         let mut device_data:HashMap<String,(HashMap<String,f64>,HashSet<String>)>=HashMap::new();
         loop {
             while let Some(event)=gilrs.next_event() {
@@ -30,7 +31,13 @@ pub fn start_input(state: Arc<AppState>) {
                     _=>{}
                 }
             }
-            let devices:Vec<_>=gilrs.gamepads().map(|(id,g)|json!({"id":format!("{}:{}",g.uuid().iter().map(|b|format!("{b:02x}")).collect::<String>(),usize::from(id)),"name":g.name()})).collect();
+            let mut devices:Vec<_>=gilrs.gamepads().map(|(id,g)|json!({"id":format!("{}:{}",g.uuid().iter().map(|b|format!("{b:02x}")).collect::<String>(),usize::from(id)),"name":g.name()})).collect();
+            if let Some(padkit_state) = padkit_client.snapshot() {
+                devices.push(json!({"id": padkit::DEVICE_ID, "name": padkit::DEVICE_NAME}));
+                device_data.insert(padkit::DEVICE_ID.into(), padkit_state);
+            } else if device_data.remove(padkit::DEVICE_ID).is_some() {
+                state.disconnect_inputs();
+            }
             for device in &devices {device_data.entry(device["id"].as_str().unwrap().into()).or_default();}
             { let mut old=state.devices.lock().unwrap();if *old!=devices { *old=devices.clone();let _=state.app.emit("devices",&devices); } }
             {
