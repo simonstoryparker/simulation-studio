@@ -4,8 +4,8 @@ Simulation Studio is a desktop app for local FRC robot simulation. It’s an att
 
 A compact overlay keeps controls nearby while you use another viewer, such as AdvantageScope. The app is built with Tauri, React, and Rust.
 
-<img width="1072" height="752" alt="Simulation Studio Preview" src="https://github.com/user-attachments/assets/ef52199d-a939-474d-9d4b-1bb0cb657632" />
-<img width="587" height="103" alt="Compact" src="https://github.com/user-attachments/assets/b28cb44f-acb9-472a-a611-353c356b01ca" />
+<img width="946" height="646" alt="Simulation Studio Preview" src="https://github.com/user-attachments/assets/f6037308-8ea2-4794-81c6-b22c1d3b6961" />
+<img width="678" height="169" alt="Compact" src="https://github.com/user-attachments/assets/90f677f0-c2ac-4cf8-8aaa-de3d2f58c7d1" />
 
 
 ## Install
