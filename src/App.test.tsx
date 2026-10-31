@@ -80,6 +80,28 @@ async function focus(payload: boolean) {
   });
 }
 
+describe("startup navigation", () => {
+  it("opens the workspace and allows switching to controllers and back", async () => {
+    await ready();
+    const tabs = screen.getByRole("navigation", { name: "Workspaces" });
+    const workspace = within(tabs).getByRole("button", {
+      name: "Workspace",
+    });
+    const controllers = within(tabs).getByRole("button", {
+      name: "Controllers",
+    });
+    expect(workspace.getAttribute("aria-pressed")).toBe("true");
+    expect(controllers.getAttribute("aria-pressed")).toBe("false");
+    expect(screen.getByRole("heading", { name: "Workspace" })).toBeTruthy();
+    fireEvent.click(controllers);
+    expect(controllers.getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByRole("heading", { name: "Controllers" })).toBeTruthy();
+    fireEvent.click(workspace);
+    expect(workspace.getAttribute("aria-pressed")).toBe("true");
+    expect(screen.queryByRole("heading", { name: "Controllers" })).toBeNull();
+  });
+});
+
 describe("connection settings", () => {
   it("submits edited endpoints and loads the connected project's workspace", async () => {
     await ready();
@@ -152,27 +174,130 @@ describe("driver controls", () => {
         .getAttribute("aria-pressed"),
     ).toBe("true");
   });
-  it("only offers moving the keyboard on a different port and labels its current port with an icon", async () => {
+  it("keeps keyboard selection visible across ports and moves its assignment", async () => {
     await ready();
     fireEvent.click(screen.getByRole("button", { name: "Controllers" }));
     const ports = document.querySelector(".port-list")! as HTMLElement;
     expect(within(ports).getByRole("img", { name: "Keyboard" })).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Keyboard here" })).toBeNull();
+    const inputs = within(
+      screen.getByRole("group", { name: "Port input devices" }),
+    );
     expect(
-      screen.queryByRole("button", { name: "Move keyboard here" }),
-    ).toBeNull();
+      inputs
+        .getByRole("button", { name: "Keyboard" })
+        .getAttribute("aria-pressed"),
+    ).toBe("true");
     fireEvent.click(
       within(ports).getByRole("button", { name: /Port 1.*Operator/ }),
     );
-    fireEvent.click(screen.getByRole("button", { name: "Move keyboard here" }));
+    expect(
+      inputs
+        .getByRole("button", { name: "Keyboard" })
+        .getAttribute("aria-pressed"),
+    ).toBe("false");
+    fireEvent.click(inputs.getByRole("button", { name: "Keyboard" }));
     await waitFor(() =>
       expect(native.invoke).toHaveBeenCalledWith("set_keyboard_port", {
         port: 1,
       }),
     );
     expect(
-      screen.queryByRole("button", { name: "Move keyboard here" }),
-    ).toBeNull();
+      inputs
+        .getByRole("button", { name: "Keyboard" })
+        .getAttribute("aria-pressed"),
+    ).toBe("true");
+    const top = screen.getByRole("button", { name: "Top" });
+    expect(top.closest(".controller-preview")).toBeTruthy();
+    fireEvent.click(top);
+    expect(top.getAttribute("aria-pressed")).toBe("true");
+    fireEvent.click(top);
+    expect(top.getAttribute("aria-pressed")).toBe("false");
+  });
+  it("assigns and clears gamepads from persistent device icons", async () => {
+    await ready();
+    fireEvent.click(screen.getByRole("button", { name: "Controllers" }));
+    await act(async () =>
+      native.listeners.get("devices")?.({
+        payload: [
+          { id: "pad-a", name: "Driver controller" },
+          { id: "pad-b", name: "Operator controller" },
+        ],
+      }),
+    );
+    const inputs = within(
+      screen.getByRole("group", { name: "Port input devices" }),
+    );
+    fireEvent.click(inputs.getByRole("button", { name: "Driver controller" }));
+    await waitFor(() =>
+      expect(
+        inputs
+          .getByRole("button", { name: "Driver controller" })
+          .getAttribute("aria-pressed"),
+      ).toBe("true"),
+    );
+    fireEvent.click(
+      inputs.getByRole("button", { name: "Operator controller" }),
+    );
+    await waitFor(() =>
+      expect(
+        inputs
+          .getByRole("button", { name: "Operator controller" })
+          .getAttribute("aria-pressed"),
+      ).toBe("true"),
+    );
+    expect(
+      inputs
+        .getByRole("button", { name: "Driver controller" })
+        .getAttribute("aria-pressed"),
+    ).toBe("false");
+    fireEvent.click(
+      inputs.getByRole("button", { name: "Operator controller" }),
+    );
+    await waitFor(() =>
+      expect(
+        inputs
+          .getByRole("button", { name: "Operator controller" })
+          .getAttribute("aria-pressed"),
+      ).toBe("false"),
+    );
+    expect(inputs.getAllByRole("button")).toHaveLength(3);
+  });
+  it("renames a port in place and cancels an unfinished rename", async () => {
+    await ready();
+    fireEvent.click(screen.getByRole("button", { name: "Controllers" }));
+    const ports = within(document.querySelector(".port-list")! as HTMLElement);
+    fireEvent.doubleClick(
+      ports.getByRole("button", { name: /Port 1.*Operator/ }),
+    );
+    const input = screen.getByRole("textbox", { name: "Rename port 1" });
+    fireEvent.change(input, { target: { value: "  Pilot  " } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    await waitFor(() =>
+      expect(ports.getByRole("button", { name: /Port 1.*Pilot/ })).toBeTruthy(),
+    );
+    expect(native.invoke).toHaveBeenCalledWith("set_profiles", {
+      profiles: expect.arrayContaining([
+        expect.objectContaining({ name: "Pilot" }),
+        expect.objectContaining({ name: "Driver" }),
+      ]),
+    });
+    fireEvent.keyDown(ports.getByRole("button", { name: /Port 1.*Pilot/ }), {
+      key: "F2",
+    });
+    fireEvent.change(screen.getByRole("textbox", { name: "Rename port 1" }), {
+      target: { value: "Discard this" },
+    });
+    fireEvent.keyDown(screen.getByRole("textbox", { name: "Rename port 1" }), {
+      key: "Escape",
+    });
+    expect(screen.queryByRole("textbox", { name: "Rename port 1" })).toBeNull();
+    expect(ports.getByRole("button", { name: /Port 1.*Pilot/ })).toBeTruthy();
+    fireEvent.doubleClick(ports.getByRole("button", { name: /Port 1.*Pilot/ }));
+    const empty = screen.getByRole("textbox", { name: "Rename port 1" });
+    fireEvent.change(empty, { target: { value: "  " } });
+    fireEvent.blur(empty);
+    expect(ports.getByRole("button", { name: /Port 1.*Pilot/ })).toBeTruthy();
+    expect(screen.queryByLabelText("Port name")).toBeNull();
   });
   it("shows hot-plugged gamepads and assigns them from the control panel", async () => {
     await ready();
@@ -242,8 +367,12 @@ describe("driver controls", () => {
         expect.objectContaining({ enabled: false, estop: false, mode: "auto" }),
       ),
     );
-    expect(screen.getByText("Full Match durations (seconds)")).toBeTruthy();
-    expect(screen.getByLabelText("Disabled transition")).toBeTruthy();
+    const durations = screen.getByRole("group", {
+      name: "Match durations in seconds",
+    });
+    expect(within(durations).getByLabelText("Auto")).toBeTruthy();
+    expect(within(durations).getByLabelText("Transition")).toBeTruthy();
+    expect(within(durations).getByLabelText("Teleop")).toBeTruthy();
   });
 });
 
@@ -385,4 +514,89 @@ describe("robot state buttons", () => {
       expect(selected("Disable")).toBe("false");
     },
   );
+});
+
+describe("robot connection header status and icon", () => {
+  it("displays 'No Robot' and unplugged icon when no robot is connected", async () => {
+    native.invoke.mockImplementation(async (name: string) => {
+      if (name === "bootstrap")
+        return {
+          endpoints: { project: "robot", control: "", nt: "" },
+          topics: [],
+          values: [],
+          devices: [],
+          compact: false,
+          controlConnected: false,
+          ntConnected: false,
+        };
+      if (name === "load_workspace") return null;
+      if (name === "update_status") return { phase: "current", downloaded: 0 };
+    });
+    await ready();
+    expect(
+      screen.getByText("No Robot", { selector: ".project-title strong" }),
+    ).toBeTruthy();
+    const brand = screen.getByLabelText("No robot connected");
+    expect(brand).toBeTruthy();
+    expect(brand.querySelector("svg.disconnected")).toBeTruthy();
+    expect(brand.closest("header")?.classList.contains("disconnected")).toBe(
+      true,
+    );
+    expect(
+      screen.queryByText(/Connect the control bridge to enable your robot/),
+    ).toBeNull();
+  });
+
+  it("updates icon and label dynamically when robot connects and disconnects", async () => {
+    native.invoke.mockImplementation(async (name: string) => {
+      if (name === "bootstrap")
+        return {
+          endpoints: { project: "robot", control: "", nt: "" },
+          topics: [],
+          values: [],
+          devices: [],
+          compact: false,
+          controlConnected: false,
+          ntConnected: false,
+        };
+      if (name === "load_workspace") return null;
+      if (name === "update_status") return { phase: "current", downloaded: 0 };
+    });
+    await ready();
+    expect(
+      screen.getByText("No Robot", { selector: ".project-title strong" }),
+    ).toBeTruthy();
+
+    // Robot connects
+    await act(async () => {
+      native.listeners.get("connection")?.({
+        payload: { service: "control", connected: true },
+      });
+    });
+    expect(
+      screen.getByText("robot", { selector: ".project-title strong" }),
+    ).toBeTruthy();
+    const connectedBrand = screen.getByLabelText("Robot connected");
+    expect(connectedBrand).toBeTruthy();
+    expect(connectedBrand.querySelector("svg.connected")).toBeTruthy();
+    expect(
+      connectedBrand.closest("header")?.classList.contains("disconnected"),
+    ).toBe(false);
+
+    // Robot disconnects
+    await act(async () => {
+      native.listeners.get("connection")?.({
+        payload: { service: "control", connected: false },
+      });
+    });
+    expect(
+      screen.getByText("No Robot", { selector: ".project-title strong" }),
+    ).toBeTruthy();
+    const disconnectedBrand = screen.getByLabelText("No robot connected");
+    expect(disconnectedBrand).toBeTruthy();
+    expect(disconnectedBrand.querySelector("svg.disconnected")).toBeTruthy();
+    expect(
+      disconnectedBrand.closest("header")?.classList.contains("disconnected"),
+    ).toBe(true);
+  });
 });

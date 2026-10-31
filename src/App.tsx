@@ -48,21 +48,41 @@ const nextFrame = () =>
 const command = <T,>(name: string, args?: Record<string, unknown>) =>
   invoke<T>(name, args);
 
-function StudioMark() {
+function StudioMark({ connected = false }: { connected?: boolean }) {
   return (
     <svg
-      className="studio-mark"
-      viewBox="0 0 32 32"
+      className={`studio-mark ${connected ? "connected" : "disconnected"}`}
+      viewBox="-2 -2 28 28"
       fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
       aria-hidden="true"
+      data-connected={connected}
     >
-      <path
-        d="M3 23h7l5-14 5 14h9M3 9h5m16 0h5"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
+      <g transform="rotate(45 12 12)">
+        {connected ? (
+          <>
+            <path d="M12 3c0-3 2-2 2-5" />
+            <path d="M7 12V8a5 5 0 0 1 10 0v4" />
+            <path d="M5 12h14" />
+            <path d="M7 12v4a5 5 0 0 0 10 0v-4" />
+            <path d="M12 21c0 3-2 2-2 5" />
+          </>
+        ) : (
+          <>
+            <path d="M12 2c0-3 2-2 2-5" />
+            <path d="M7 9V7a5 5 0 0 1 10 0v2" />
+            <path d="M5 9h14" />
+            <path d="M9 15v-3" />
+            <path d="M15 15v-3" />
+            <path d="M5 15h14" />
+            <path d="M7 15v2a5 5 0 0 0 10 0v-2" />
+            <path d="M12 22c0 3-2 2-2 5" />
+          </>
+        )}
+      </g>
     </svg>
   );
 }
@@ -498,14 +518,16 @@ function ControllerPanel({
   keyboardPort,
   onKeyboardPort,
   onChange,
-  onClose,
+  onControllerPort,
+  assigningController,
 }: {
   profiles: PortProfile[];
   devices: Device[];
   keyboardPort: number;
   onKeyboardPort: (port: number) => void;
   onChange: (profiles: PortProfile[]) => void;
-  onClose: () => void;
+  onControllerPort: (deviceId: string, port: number) => Promise<void>;
+  assigningController: boolean;
 }) {
   const sticks = useSticks();
   const [port, setPort] = useState(0),
@@ -513,6 +535,7 @@ function ControllerPanel({
   const [error, setError] = useState(""),
     [capture, setCapture] = useState<string | null>(null);
   const [view, setView] = useState<"front" | "top">("front");
+  const [renamingPort, setRenamingPort] = useState<number | null>(null);
   useEffect(() => setDraft(profiles[port]), [profiles, port]);
   const captureCleanup = useRef<(() => void) | undefined>(undefined);
   useEffect(() => () => captureCleanup.current?.(), []);
@@ -531,6 +554,7 @@ function ControllerPanel({
     setPort(i);
     setDraft(profiles[i]);
     setCapture(null);
+    setRenamingPort(null);
   };
   const binding = (target: string) => {
     captureCleanup.current?.();
@@ -623,15 +647,42 @@ function ControllerPanel({
       [`${a.input}:positive`, pair[1]],
     ] as [string, string][];
   });
+  const buttonLabels: Record<string, string> = {
+    South: "A",
+    East: "B",
+    West: "X",
+    North: "Y",
+    LeftTrigger: "Left bumper",
+    RightTrigger: "Right bumper",
+    Select: "View",
+    Start: "Menu",
+    LeftThumb: "Left stick click",
+    RightThumb: "Right stick click",
+  };
+  const bindingRow = (id: string, label: string) => (
+    <div className="binding-row" key={id}>
+      <span>{label}</span>
+      <button
+        className="binding-key"
+        aria-label={`Bind ${label}`}
+        aria-pressed={capture === id}
+        onClick={() => binding(id)}
+      >
+        {capture === id ? "Press a key…" : keyFor(id) || "Unbound"}
+      </button>
+      <button
+        className="binding-clear"
+        aria-label={`Clear ${label} binding`}
+        title={`Clear ${label} binding`}
+        onClick={() => clearBinding(id)}
+      >
+        <span aria-hidden="true">×</span>
+      </button>
+    </div>
+  );
   return (
     <section className="controllers-page">
-      <header>
-        <div>
-          <h1>Controllers</h1>
-          <p>Assign devices and tune keyboard bindings for each port.</p>
-        </div>
-        <button onClick={onClose}>Workspace</button>
-      </header>
+      <h1 className="sr-only">Controllers</h1>
       <div className="controller-layout">
         <div className="port-list">
           {profiles.map((p, i) => {
@@ -639,12 +690,62 @@ function ControllerPanel({
               ? (devices.find((d) => `gamepad:${d.id}` === p.source)?.name ??
                 "Device unavailable")
               : "No controller";
+            if (renamingPort === i)
+              return (
+                <div className="port-rename" key={i}>
+                  <span className="port-name">
+                    <span>Port {i}</span>
+                    <input
+                      autoFocus
+                      aria-label={`Rename port ${i}`}
+                      defaultValue={p.name}
+                      onFocus={(e) => e.currentTarget.select()}
+                      onBlur={(e) => {
+                        const name = e.currentTarget.value.trim();
+                        setRenamingPort(null);
+                        if (name && name !== p.name) save({ ...p, name });
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          e.currentTarget.blur();
+                        }
+                        if (e.key === "Escape") {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          setRenamingPort(null);
+                        }
+                      }}
+                    />
+                    <PortInputs
+                      profile={p}
+                      port={i}
+                      keyboardPort={keyboardPort}
+                      devices={devices}
+                    />
+                  </span>
+                  <small>{source}</small>
+                </div>
+              );
             return (
               <button
                 key={i}
                 className={port === i ? "selected" : ""}
                 aria-pressed={port === i}
+                title={`Port ${i}: ${p.name} · ${source}. Double-click or press F2 to rename.`}
+                aria-keyshortcuts="F2"
                 onClick={() => choosePort(i)}
+                onDoubleClick={() => {
+                  choosePort(i);
+                  setRenamingPort(i);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "F2") {
+                    e.preventDefault();
+                    choosePort(i);
+                    setRenamingPort(i);
+                  }
+                }}
               >
                 <span className="port-name">
                   <span>Port {i}</span>
@@ -662,52 +763,88 @@ function ControllerPanel({
           })}
         </div>
         <div className="controller-editor">
-          <div className="port-tabs">
-            {keyboardPort !== port && (
-              <button onClick={() => onKeyboardPort(port)}>
-                <Icon name="keyboard" />
-                Move keyboard here
+          <div
+            className="device-selectors"
+            role="group"
+            aria-label="Port input devices"
+          >
+            <button
+              aria-label="Keyboard"
+              aria-pressed={keyboardPort === port}
+              title={
+                keyboardPort === port
+                  ? "Keyboard assigned to this port"
+                  : "Assign keyboard to this port"
+              }
+              onClick={() => onKeyboardPort(port)}
+            >
+              <InputMark kind="keyboard" label="Keyboard" />
+            </button>
+            {devices.map((device, index) => {
+              const selected = draft.source === `gamepad:${device.id}`;
+              return (
+                <button
+                  key={device.id}
+                  aria-label={device.name}
+                  aria-pressed={selected}
+                  disabled={assigningController}
+                  title={`${selected ? "Disconnect" : "Assign"} ${device.name}`}
+                  onClick={() => {
+                    if (selected) {
+                      const next = { ...draft, source: "none" };
+                      setDraft(next);
+                      save(next);
+                    } else void onControllerPort(device.id, port);
+                  }}
+                >
+                  <InputMark
+                    kind="controller"
+                    label={device.name}
+                    number={devices.length > 1 ? index + 1 : undefined}
+                  />
+                </button>
+              );
+            })}
+            {draft.source.startsWith("gamepad:") &&
+              !devices.some(
+                (device) => `gamepad:${device.id}` === draft.source,
+              ) && (
+                <button
+                  className="device-unavailable"
+                  aria-label="Assigned controller unavailable"
+                  aria-pressed="true"
+                  title="Assigned controller unavailable. Click to clear assignment."
+                  onClick={() => {
+                    const next = { ...draft, source: "none" };
+                    setDraft(next);
+                    save(next);
+                  }}
+                >
+                  <InputMark
+                    kind="controller"
+                    label="Controller disconnected"
+                  />
+                </button>
+              )}
+            {!devices.length && !draft.source.startsWith("gamepad:") && (
+              <button
+                disabled
+                aria-label="No controllers connected"
+                title="No controllers connected"
+              >
+                <InputMark kind="controller" label="No controllers connected" />
               </button>
             )}
-            <button onClick={() => setView(view === "front" ? "top" : "front")}>
-              {view === "front" ? "Top view" : "Front view"}
+          </div>
+          <div className="controller-preview">
+            <button
+              className="controller-view-toggle"
+              aria-pressed={view === "top"}
+              title={view === "top" ? "Show front view" : "Show top view"}
+              onClick={() => setView(view === "front" ? "top" : "front")}
+            >
+              Top
             </button>
-          </div>
-          <div className="controller-fields">
-            <label>
-              Port name
-              <input
-                value={draft.name}
-                onChange={(e) => setDraft({ ...draft, name: e.target.value })}
-                onBlur={() => save()}
-              />
-            </label>
-            <label>
-              Physical controller
-              <select
-                value={draft.source}
-                onChange={(e) => {
-                  const next = { ...draft, source: e.target.value };
-                  setDraft(next);
-                  save(next);
-                }}
-              >
-                <option value="none">None</option>
-                {draft.source.startsWith("gamepad:") &&
-                  !devices.some((d) => `gamepad:${d.id}` === draft.source) && (
-                    <option value={draft.source}>
-                      Assigned device unavailable
-                    </option>
-                  )}
-                {devices.map((d) => (
-                  <option key={d.id} value={`gamepad:${d.id}`}>
-                    {d.name} · {d.id.slice(-5)}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </div>
-          <div className="controller-grid">
             <Suspense
               fallback={
                 <div className="controller-canvas" role="status">
@@ -723,73 +860,36 @@ function ControllerPanel({
                 }}
               />
             </Suspense>
-            <div className="binding-list">
-              <h3>Keyboard bindings</h3>
-              {draft.buttons.map((b) => {
-                const label =
-                  (
-                    {
-                      South: "A",
-                      East: "B",
-                      West: "X",
-                      North: "Y",
-                      LeftTrigger: "Left bumper",
-                      RightTrigger: "Right bumper",
-                      Select: "View",
-                      Start: "Menu",
-                      LeftThumb: "Left stick click",
-                      RightThumb: "Right stick click",
-                    } as Record<string, string>
-                  )[b.input] ?? b.input;
-                return (
-                  <div key={b.input}>
-                    <span>{label}</span>
-                    <button onClick={() => binding(b.input)}>
-                      {capture === b.input
-                        ? "Press a key…"
-                        : b.key || "Unbound"}
-                    </button>
-                    <button
-                      aria-label={`Clear ${label} binding`}
-                      onClick={() => clearBinding(b.input)}
-                    >
-                      Clear
-                    </button>
-                  </div>
-                );
-              })}
-              {axisTargets.map(([id, label]) => (
-                <div key={id}>
-                  <span>{label}</span>
-                  <button onClick={() => binding(id)}>
-                    {capture === id ? "Press a key…" : keyFor(id) || "Unbound"}
-                  </button>
-                  <button
-                    aria-label={`Clear ${label} binding`}
-                    onClick={() => clearBinding(id)}
-                  >
-                    Clear
-                  </button>
-                </div>
-              ))}
-              {draft.pov.map((key, i) => (
-                <div key={i}>
-                  <span>
-                    {["D-pad up", "D-pad right", "D-pad down", "D-pad left"][i]}
-                  </span>
-                  <button onClick={() => binding(`DPad:${i}`)}>
-                    {capture === `DPad:${i}`
-                      ? "Press a key…"
-                      : key || "Unbound"}
-                  </button>
-                  <button onClick={() => clearBinding(`DPad:${i}`)}>
-                    Clear
-                  </button>
-                </div>
-              ))}
-            </div>
           </div>
-          <small>
+          <section className="binding-list" aria-labelledby="bindings-heading">
+            <h2 id="bindings-heading">Keyboard bindings</h2>
+            <div className="binding-groups">
+              <section className="binding-group">
+                <h3>Buttons</h3>
+                {draft.buttons.map((b) =>
+                  bindingRow(b.input, buttonLabels[b.input] ?? b.input),
+                )}
+              </section>
+              <section className="binding-group">
+                <h3>Sticks &amp; triggers</h3>
+                {axisTargets.map(([id, label]) => bindingRow(id, label))}
+              </section>
+              <section className="binding-group binding-dpad">
+                <h3>D-pad</h3>
+                <div>
+                  {draft.pov.map((_, i) =>
+                    bindingRow(
+                      `DPad:${i}`,
+                      ["D-pad up", "D-pad right", "D-pad down", "D-pad left"][
+                        i
+                      ],
+                    ),
+                  )}
+                </div>
+              </section>
+            </div>
+          </section>
+          <small className="controller-input-preview">
             Preview:{" "}
             {sticks[port]?.axes.map((v) => v.toFixed(2)).join(" · ") ||
               "No input"}{" "}
@@ -832,6 +932,15 @@ export default function App() {
   const [narrowCanvas, setNarrowCanvas] = useState(
     () => window.matchMedia?.("(max-width: 600px)").matches ?? false,
   );
+  const [sidebarResizing, setSidebarResizing] = useState(false);
+  const sidebarControllers = useRef(controllers);
+  useEffect(() => {
+    if (sidebarControllers.current === controllers) return;
+    sidebarControllers.current = controllers;
+    setSidebarResizing(true);
+    const timeout = window.setTimeout(() => setSidebarResizing(false), 280);
+    return () => window.clearTimeout(timeout);
+  }, [controllers]);
   useEffect(() => {
     const query = window.matchMedia?.("(max-width: 600px)");
     if (!query) return;
@@ -1444,6 +1553,13 @@ export default function App() {
   const disableSelected = Boolean(
     connections.control && applied && !applied.enabled && !applied.estop,
   );
+  const isRobotConnected = Boolean(connections.control || connections.nt);
+  const rawProject =
+    endpoints.project.split(/[\\/]/).filter(Boolean).at(-1) || "";
+  const robotTitle =
+    !isRobotConnected && (!rawProject || rawProject.toLowerCase() === "robot")
+      ? "No Robot"
+      : rawProject || "robot";
   if (compact)
     return (
       <div className="compact-app" data-tauri-drag-region>
@@ -1625,37 +1741,18 @@ export default function App() {
     );
   return (
     <div className={`app view-${mobilePanel}`}>
-      <header className="topbar">
+      <header className={`topbar${isRobotConnected ? "" : " disconnected"}`}>
         <div
           className="studio-brand"
-          title="Simulation Studio"
-          aria-label="Simulation Studio"
+          title={isRobotConnected ? "Robot connected" : "No robot connected"}
+          aria-label={
+            isRobotConnected ? "Robot connected" : "No robot connected"
+          }
         >
-          <StudioMark />
+          <StudioMark connected={isRobotConnected} />
         </div>
         <div className="project-title" title={endpoints.project}>
-          <strong>
-            {endpoints.project.split(/[\\/]/).filter(Boolean).at(-1) ||
-              "No project connected"}
-          </strong>
-        </div>
-        <div className="connection-status" aria-label="Connections">
-          <span
-            title={`Control bridge ${connections.control ? "connected" : "offline"}`}
-            aria-label={`Control bridge ${connections.control ? "connected" : "offline"}`}
-            className={connections.control ? "online" : "offline"}
-          >
-            <i />
-            Control
-          </span>
-          <span
-            title={`NetworkTables ${connections.nt ? "connected" : "offline"}`}
-            aria-label={`NetworkTables ${connections.nt ? "connected" : "offline"}`}
-            className={connections.nt ? "online" : "offline"}
-          >
-            <i />
-            NT4
-          </span>
+          <strong>{robotTitle}</strong>
         </div>
         <button
           className="icon-button"
@@ -1815,7 +1912,9 @@ export default function App() {
               </button>
             ))}
           </nav>
-          <div className="main">
+          <div
+            className={`main${controllers ? " controllers-active" : ""}${sidebarResizing ? " sidebar-resizing" : ""}`}
+          >
             <aside className="left-column">
               <section className="robot-controls" aria-label="Driver station">
                 <div className="control-row">
@@ -1837,14 +1936,6 @@ export default function App() {
                     Disable
                   </button>
                 </div>
-                {!connections.control && (
-                  <p className="connection-hint">
-                    Connect the control bridge to enable your robot.{" "}
-                    <button onClick={() => setSettingsPage(true)}>
-                      Connection settings
-                    </button>
-                  </p>
-                )}
                 <div className="control-selectors">
                   <div
                     className="mode-selector"
@@ -1956,18 +2047,22 @@ export default function App() {
                   </small>
                 )}
                 {mode === "full" && (
-                  <div className="duration-fields">
-                    <strong>Full Match durations (seconds)</strong>
+                  <div
+                    className="duration-fields"
+                    role="group"
+                    aria-label="Match durations in seconds"
+                  >
                     {(
                       [
                         ["auto", "Auto"],
-                        ["transition", "Disabled transition"],
+                        ["transition", "Transition"],
                         ["teleop", "Teleop"],
                       ] as const
                     ).map(([key, label]) => (
                       <label key={key}>
                         {label}
                         <input
+                          title={`${label} duration in seconds`}
                           disabled={["Auto", "Transition", "Teleop"].includes(
                             matchPhase,
                           )}
@@ -1992,7 +2087,10 @@ export default function App() {
                 <div className="keyboard-dest">
                   <strong className="keyboard-port-label">
                     <InputMark kind="keyboard" label="Keyboard" />
-                    <span>Keyboard port</span>
+                    <span>
+                      Keyboard
+                      <span className="keyboard-port-suffix"> port</span>
+                    </span>
                   </strong>
                   <div>
                     {workspace.profiles.map((p, i) => (
@@ -2203,7 +2301,8 @@ export default function App() {
                   devices={devices}
                   keyboardPort={workspace.keyboardPort}
                   onKeyboardPort={setKeyboardPort}
-                  onClose={() => setControllers(false)}
+                  onControllerPort={setControllerPort}
+                  assigningController={assigningController}
                   onChange={(profiles) =>
                     setWorkspace((old) => ({ ...old, profiles }))
                   }

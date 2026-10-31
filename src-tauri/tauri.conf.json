@@ -24,7 +24,7 @@
     "beforeBuildCommand": "npm run build",
     "frontendDist": "../dist"
   },
-  "version": "0.1.4",
+  "version": "0.1.5",
   "bundle": {
     "active": true,
     "targets": ["app"],

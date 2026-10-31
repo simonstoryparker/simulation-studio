@@ -1,0 +1,38 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended", ":disableRateLimiting", "schedule:daily"],
+  "timezone": "America/Los_Angeles",
+  "labels": ["dependencies"],
+  "semanticCommits": "disabled",
+  "gitIgnoredAuthors": ["114827586+autofix-ci[bot]@users.noreply.github.com"],
+  "packageRules": [
+    {
+      "groupName": "Tauri",
+      "matchPackageNames": ["@tauri-apps/**", "tauri", "tauri-*", "tauri-build"]
+    },
+    {
+      "groupName": "React",
+      "matchPackageNames": [
+        "react",
+        "react-dom",
+        "@types/react",
+        "@types/react-dom"
+      ]
+    },
+    {
+      "groupName": "Vite and dev tools",
+      "matchPackageNames": [
+        "vite",
+        "@vitejs/**",
+        "vitest",
+        "jsdom",
+        "prettier",
+        "typescript"
+      ]
+    },
+    {
+      "groupName": "GitHub Actions",
+      "matchManagers": ["github-actions"]
+    }
+  ]
+}

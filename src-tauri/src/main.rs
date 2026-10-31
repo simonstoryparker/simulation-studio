@@ -393,6 +393,42 @@ fn set_compact(
 ) -> Result<Option<WindowBounds>, String> {
     change_compact(compact, width, height, x, y, &state)
 }
+
+#[cfg(target_os = "macos")]
+fn set_window_decorations(window: &tauri::WebviewWindow, decorated: bool) -> Result<(), String> {
+    use objc2::MainThreadMarker;
+    use objc2_app_kit::{NSWindow, NSWindowStyleMask};
+
+    // Both synchronous commands and native window callbacks run on the main thread.
+    // Tao's set_decorations queues setStyleMask asynchronously, allowing a stale
+    // borderless mask to overwrite restoration during a focus/compact transition.
+    // Keep all decoration changes here so there are no queued masks to race with.
+    let _main_thread = MainThreadMarker::new().ok_or("Window chrome requires the main thread")?;
+    let native = window.ns_window().map_err(|e| e.to_string())?;
+    // SAFETY: Tauri owns this live NSWindow and we checked the main thread above.
+    let native = unsafe { &*native.cast::<NSWindow>() };
+    let chrome =
+        NSWindowStyleMask::Titled | NSWindowStyleMask::Closable | NSWindowStyleMask::Miniaturizable;
+    let mut mask = native.styleMask();
+    if decorated {
+        mask |= chrome;
+    } else {
+        mask &= !chrome;
+    }
+    if mask != native.styleMask() {
+        let responder = native.firstResponder();
+        native.setStyleMask(mask);
+        // Changing the frame view can reset WebKit's keyboard responder.
+        native.makeFirstResponder(responder.as_deref());
+    }
+    Ok(())
+}
+
+#[cfg(not(target_os = "macos"))]
+fn set_window_decorations(window: &tauri::WebviewWindow, decorated: bool) -> Result<(), String> {
+    window.set_decorations(decorated).map_err(|e| e.to_string())
+}
+
 fn change_compact(
     compact: bool,
     width: Option<f64>,
@@ -418,7 +454,7 @@ fn change_compact(
         window
             .set_min_size(Some(tauri::LogicalSize::new(320., 56.)))
             .map_err(|e| e.to_string())?;
-        window.set_decorations(false).map_err(|e| e.to_string())?;
+        set_window_decorations(&window, false)?;
         window.set_always_on_top(true).map_err(|e| e.to_string())?;
         let width = width
             .filter(|v| v.is_finite())
@@ -445,7 +481,7 @@ fn change_compact(
         let _ = state.app.emit("compact-changed", false);
         window.set_always_on_top(false).map_err(|e| e.to_string())?;
         window.set_resizable(true).map_err(|e| e.to_string())?;
-        window.set_decorations(true).map_err(|e| e.to_string())?;
+        set_window_decorations(&window, true)?;
         window
             .set_min_size(Some(tauri::LogicalSize::new(900., 600.)))
             .map_err(|e| e.to_string())?;

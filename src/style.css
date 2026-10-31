@@ -726,18 +726,21 @@ textarea {
 }
 .duration-fields {
   display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 6px;
 }
-.duration-fields strong {
-  grid-column: 1/-1;
-}
 .duration-fields label {
-  font-size: 10px;
+  min-width: 0;
+  gap: 4px;
+  color: var(--text-muted);
 }
 .duration-fields input {
+  min-width: 0;
   width: 100%;
-  padding: 5px;
+  height: 32px;
+  padding: 4px 6px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
 }
 .overlay-settings {
   display: flex;
@@ -1371,31 +1374,6 @@ input::placeholder {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.connection-status {
-  display: flex;
-  gap: 18px;
-  margin-right: 12px;
-  font-size: 12px;
-}
-.connection-status > span {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  color: var(--text-primary);
-  white-space: nowrap;
-}
-.connection-status > span > span {
-  color: var(--text-muted);
-}
-.connection-status i {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--text-muted);
-}
-.connection-status .online i {
-  background: var(--status-positive);
-}
 .topbar > button {
   background: transparent;
   padding: 7px 12px;
@@ -1774,9 +1752,6 @@ input::placeholder {
 }
 
 @media (max-width: 1200px) {
-  .connection-status > span > span {
-    display: none;
-  }
   .studio-brand {
     padding-right: 4px;
   }
@@ -1809,11 +1784,6 @@ input::placeholder {
     flex: 1;
     padding: 0;
     border: 0;
-    margin: 0;
-  }
-  .connection-status {
-    order: 4;
-    gap: 12px;
     margin: 0;
   }
   .mobile-navigation {
@@ -1923,15 +1893,6 @@ input::placeholder {
   }
   .project-title strong {
     font-size: 12px;
-  }
-  .connection-status {
-    order: 4;
-    margin-top: 4px;
-    width: 100%;
-    font-size: 12px;
-  }
-  .connection-status > span > span {
-    display: inline;
   }
   .mobile-navigation {
     padding: 0 16px;
@@ -2146,6 +2107,43 @@ input::placeholder {
   padding: 4px 12px;
   gap: 10px;
   flex-wrap: nowrap;
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+}
+.topbar.disconnected {
+  --disconnect-ground: #291c19;
+  --disconnect-stripe: #392620;
+  background: var(--disconnect-ground);
+}
+.topbar.disconnected::before {
+  content: "";
+  position: absolute;
+  inset: 0 -64px;
+  z-index: -1;
+  pointer-events: none;
+  /* One 64px horizontal tile keeps the loop seamless at any bar height. */
+  background: repeating-linear-gradient(
+    135deg,
+    var(--disconnect-ground) 0,
+    var(--disconnect-ground) 22.6274px,
+    var(--disconnect-stripe) 22.6274px,
+    var(--disconnect-stripe) 45.2548px
+  );
+  animation: disconnected-stripes 3s linear infinite;
+}
+@keyframes disconnected-stripes {
+  from {
+    transform: translateX(-32px);
+  }
+  to {
+    transform: translateX(32px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .topbar.disconnected::before {
+    animation: none;
+  }
 }
 .studio-brand {
   padding: 0;
@@ -2166,13 +2164,6 @@ input::placeholder {
 .project-title strong {
   font-size: 12px;
   font-weight: 500;
-}
-.connection-status {
-  order: 0;
-  width: auto;
-  margin: 0 4px 0 0;
-  gap: 12px;
-  font-size: 11px;
 }
 .app .topbar button.icon-button {
   width: 28px;
@@ -2292,10 +2283,6 @@ input::placeholder {
   }
   .project-title {
     flex-basis: auto;
-  }
-  .connection-status {
-    gap: 8px;
-    margin: 0;
   }
   .app .topbar button.icon-button {
     width: 44px;
@@ -2928,4 +2915,373 @@ input::placeholder {
   .state-time-details > span {
     font-size: 12px;
   }
+}
+
+/* Keep every controller binding on screen in the 900 × 600 utility window.
+   The editor uses a compact preview column and two equal binding columns. */
+.controllers-page {
+  container-type: inline-size;
+  padding: 10px;
+  gap: 8px;
+}
+.controllers-page > header {
+  flex: none;
+  min-height: 0;
+  align-items: center;
+}
+.controllers-page header p {
+  margin-bottom: 0;
+}
+.controllers-page .controller-layout {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 8px;
+}
+.controllers-page .port-list {
+  display: grid;
+  flex: none;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px;
+}
+.controllers-page .port-list button {
+  min-width: 0;
+  padding: 5px 8px;
+}
+.controllers-page .port-name {
+  gap: 6px;
+  flex-wrap: nowrap;
+}
+.controllers-page .port-name strong,
+.controllers-page .port-list small {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.controllers-page .port-name > span,
+.controllers-page .port-name strong {
+  font-size: 12px;
+}
+.controllers-page .port-name > span {
+  flex: none;
+}
+.controllers-page .port-list small {
+  margin-top: 1px;
+  line-height: 1.3;
+}
+.controllers-page .controller-editor {
+  display: grid;
+  flex: 1;
+  min-height: 0;
+  max-height: 360px;
+  grid-template-columns: minmax(180px, 1fr) minmax(0, 2fr);
+  grid-template-rows: auto minmax(120px, 1fr) auto;
+  gap: 8px 12px;
+  overflow: visible;
+}
+.controllers-page .controller-fields {
+  grid-column: 1;
+  grid-row: 1;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
+  margin: 0;
+}
+.controllers-page .controller-fields label {
+  gap: 4px;
+  font-size: 12px;
+}
+.controllers-page .controller-fields :is(input, select) {
+  width: 100%;
+  min-width: 0;
+  min-height: 30px;
+  padding: 4px 7px;
+  font-size: 12px;
+}
+.controllers-page .port-tabs {
+  grid-column: 1;
+  grid-row: 2;
+  gap: 4px;
+}
+.controllers-page .port-tabs button {
+  min-height: 28px;
+  padding: 4px 6px;
+  font-size: 12px;
+}
+.controller-preview {
+  position: relative;
+  grid-column: 1;
+  grid-row: 2;
+  min-width: 0;
+  min-height: 0;
+}
+.controller-preview :is(.controller-canvas, .gamepad-fallback) {
+  height: 100%;
+  min-height: 120px;
+}
+.controller-input-preview {
+  grid-column: 1;
+  grid-row: 3;
+  overflow-wrap: anywhere;
+}
+.controllers-page .binding-list {
+  grid-column: 2;
+  grid-row: 1 / 4;
+  align-self: start;
+  min-width: 0;
+  max-height: none;
+  height: auto;
+  padding: 8px;
+  overflow: visible;
+}
+.controllers-page .binding-list h2 {
+  margin: 0 0 8px;
+  font-size: 14px;
+}
+.binding-list .binding-groups {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+}
+.binding-group {
+  min-width: 0;
+}
+.controllers-page .binding-group h3 {
+  margin: 0 0 4px;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 500;
+}
+.binding-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 74px 22px;
+  gap: 2px;
+  align-items: center;
+  min-height: 22px;
+}
+.binding-list .binding-row > span {
+  font-size: 11px;
+  line-height: 1.2;
+}
+.binding-list .binding-row button {
+  min-width: 0;
+  min-height: 22px;
+  padding: 2px;
+  font-size: 11px;
+}
+.binding-key[aria-pressed="true"] {
+  color: var(--accent);
+  outline: 1px solid var(--accent);
+}
+.binding-clear {
+  color: var(--text-muted);
+}
+.binding-list .binding-clear span {
+  display: block;
+  font-size: 16px;
+  line-height: 16px;
+}
+.binding-dpad {
+  grid-column: 1 / -1;
+}
+.binding-dpad > div {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 10px;
+}
+.controllers-page .controller-editor > .error {
+  grid-column: 1 / -1;
+  margin: 0;
+}
+@container (min-width: 900px) {
+  .controllers-page .port-list {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+}
+@container (max-width: 560px) {
+  .controllers-page .controller-editor {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto 220px auto auto;
+    flex: none;
+    max-height: none;
+  }
+  .controllers-page .controller-fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .controllers-page .binding-list {
+    grid-column: 1;
+    grid-row: 3;
+  }
+  .controller-input-preview {
+    grid-row: 4;
+  }
+}
+@media (max-width: 600px) {
+  .controllers-page .port-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .controllers-page .binding-groups,
+  .binding-dpad > div {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .binding-list .binding-row {
+    min-height: 44px;
+    grid-template-columns: minmax(0, 1fr) 100px 44px;
+  }
+  .binding-list .binding-row button {
+    min-height: 44px;
+    font-size: 12px;
+  }
+  .binding-list .binding-row > span {
+    font-size: 12px;
+  }
+}
+
+.port-rename {
+  min-width: 0;
+  padding: 5px 8px;
+  border: 1px solid transparent;
+  border-bottom-color: var(--accent);
+  border-radius: 4px;
+  background: var(--surface-control);
+  line-height: 1.4;
+}
+.controllers-page .port-name strong {
+  position: relative;
+  cursor: text;
+}
+.controllers-page .port-name strong::after {
+  content: "";
+  position: absolute;
+  inset: auto 0 0;
+  height: 1px;
+  background: var(--text-muted);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 150ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+@media (hover: hover) and (pointer: fine) {
+  .controllers-page .port-list button:hover .port-name strong::after {
+    opacity: 1;
+  }
+}
+.controllers-page .port-list button:focus-visible .port-name strong::after {
+  opacity: 1;
+}
+@media (prefers-reduced-motion: reduce) {
+  .controllers-page .port-name strong::after {
+    transition-duration: 100ms;
+  }
+}
+.controllers-page .port-rename input {
+  width: 0;
+  min-width: 0;
+  flex: 1;
+  height: 18px;
+  min-height: 18px;
+  padding: 0 2px;
+  font-size: 12px;
+}
+
+@media (min-width: 601px) {
+  .main > .left-column {
+    /* Let secondary copy fade before its line length changes. */
+    transition: flex-basis 200ms cubic-bezier(0.32, 0.72, 0, 1) 80ms;
+  }
+  .main.controllers-active > .left-column {
+    flex-basis: 208px;
+  }
+  .left-column :is(.keyboard-port-label, .device-port-label) {
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+  }
+  .left-column :is(.keyboard-port-label > span:not(.input-mark), .device-name) {
+    opacity: 1;
+    transition: opacity 150ms cubic-bezier(0.23, 1, 0.32, 1) 160ms;
+  }
+  .main.controllers-active
+    :is(.keyboard-port-label > span:not(.input-mark), .device-name) {
+    opacity: 0;
+    transition: opacity 100ms cubic-bezier(0.23, 1, 0.32, 1);
+  }
+  .left-column
+    :is(
+      .connection-hint,
+      .state-time-details > span,
+      .estop-note,
+      .topic-empty
+    ) {
+    transition: opacity 150ms cubic-bezier(0.23, 1, 0.32, 1);
+  }
+  .main.sidebar-resizing
+    .left-column
+    :is(
+      .connection-hint,
+      .state-time-details > span,
+      .estop-note,
+      .topic-empty
+    ) {
+    opacity: 0;
+    transition-duration: 100ms;
+  }
+  .main.controllers-active .state-time-details {
+    min-width: 0;
+  }
+  .main.controllers-active .state-time-details > span {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .main > .left-column {
+    transition: none;
+  }
+  .main.sidebar-resizing
+    .left-column
+    :is(
+      .connection-hint,
+      .state-time-details > span,
+      .estop-note,
+      .topic-empty
+    ) {
+    opacity: 1;
+  }
+}
+
+.device-selectors {
+  grid-column: 1;
+  grid-row: 1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.device-selectors button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 34px;
+  min-height: 32px;
+  padding: 5px 8px;
+}
+.device-selectors button[aria-pressed="true"] {
+  --button-bottom: var(--accent);
+}
+.device-selectors .input-mark svg {
+  width: 18px;
+  height: 18px;
+}
+.device-selectors .device-unavailable .input-mark {
+  opacity: 0.5;
+}
+.controller-preview .controller-view-toggle {
+  position: absolute;
+  z-index: 2;
+  top: 6px;
+  right: 6px;
+  min-height: 26px;
+  padding: 3px 8px;
+  font-size: 12px;
 }
